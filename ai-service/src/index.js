@@ -1,3 +1,3 @@
-const { DashScopeClient } = require('./client'); // Updated import
+const { DashScopeClient } = require("./client");
 
-module.exports = DashScopeClient; // Main export remains the class itself
+module.exports = DashScopeClient;
