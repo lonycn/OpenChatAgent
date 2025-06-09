@@ -225,15 +225,24 @@
 
 ---
 
-核心模块 TODO（按开发优先级排序）
-TODO_ai-service.md - AI 服务模块
+# 核心模块 TODO（按开发优先级排序）
+
+## 1
+
+[x] TODO_ai-service.md - AI 服务模块
 阿里百炼 API 封装
 对话和知识库集成
 第 1 周开发重点
-TODO_chat-session.md - 会话管理模块
+
+## 2
+
+[x] TODO_chat-session.md - 会话管理模块
 Redis 会话状态管理
 消息历史存储
 第 1 周开发重点
+
+## 3
+
 TODO_chat-core.md - 消息网关模块
 WebSocket + REST API
 消息路由和状态控制
