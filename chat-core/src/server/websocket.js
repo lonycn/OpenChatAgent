@@ -1,7 +1,10 @@
 const WebSocket = require('ws');
 const { v4: uuidv4 } = require('uuid');
 const connectionManager = require('../services/ConnectionManager');
-const messageRouter = require('../services/MessageRouter'); // Import MessageRouter
+const messageRouter = require('../services/MessageRouter');
+const { SessionManager } = require('../../../chat-session/src'); // For session operations
+
+const sessionManager = new SessionManager(); // Instantiate SessionManager
 
 function initializeWebSocket(httpServer) {
   if (!httpServer) {
@@ -27,42 +30,86 @@ function initializeWebSocket(httpServer) {
       clientId: ws.id
     });
 
-    ws.on('message', (messageBuffer) => {
+    ws.on('message', async (messageBuffer) => { // Made async
       let parsedMessage;
       try {
         const messageString = messageBuffer.toString();
         parsedMessage = JSON.parse(messageString);
         console.log(`WebSocket: Received message from ${ws.id}:`, parsedMessage);
 
-        // Route the message using MessageRouter
-        // For now, userId is a placeholder. In a real app, it would be derived from auth/session.
-        const placeholderUserId = `user_for_${ws.id}`;
-        messageRouter.handleIncomingMessage(ws.id, placeholderUserId, parsedMessage)
-          .catch(e => {
-            // Catch errors from handleIncomingMessage to prevent unhandled promise rejections on the WebSocket server
-            console.error(`WebSocket: Error processing message via MessageRouter for client ${ws.id}:`, e);
-            connectionManager.sendMessageToConnection(ws.id, {
-              type: 'error',
-              id: uuidv4(),
-              timestamp: new Date().toISOString(),
-              message: 'An error occurred while processing your message.',
-              details: e.message // Optionally send error details, be cautious with sensitive info
-            });
+        const connDetails = connectionManager.getConnectionDetails(ws.id);
+
+        if (parsedMessage.type === 'init' || !connDetails?.sessionId) {
+          // Handle initialization message
+          const { userId: msgUserId, sessionId: msgSessionId } = parsedMessage.payload || {};
+
+          if (!msgUserId) {
+            connectionManager.sendMessageToConnection(ws.id, { type: 'error', message: 'Initialization error: userId is required in init message payload.' });
+            return;
+          }
+
+          let sessionToUse;
+          let finalSessionId;
+          let finalUserId = msgUserId; // Trust userId from init message for now
+
+          if (msgSessionId) {
+            console.log(`WebSocket: Client ${ws.id} provided existing sessionId ${msgSessionId}`);
+            sessionToUse = await sessionManager.getSession(msgSessionId);
+            if (sessionToUse && sessionToUse.userId !== finalUserId) {
+                console.warn(`WebSocket: SessionId ${msgSessionId} belongs to another user (${sessionToUse.userId}). Creating new session for ${finalUserId}.`);
+                sessionToUse = null; // Force new session
+            } else if (sessionToUse) {
+                console.log(`WebSocket: Reusing existing session ${msgSessionId} for user ${finalUserId}`);
+            }
+          }
+
+          if (!sessionToUse) {
+            console.log(`WebSocket: No valid existing session found for user ${finalUserId} (or new user). Creating new session.`);
+            // TODO: Future: Implement sessionManager.findActiveSessionByUserId(finalUserId)
+            sessionToUse = await sessionManager.createSession(finalUserId);
+          }
+
+          finalSessionId = sessionToUse.sessionId;
+          connectionManager.setConnectionDetails(ws.id, { sessionId: finalSessionId, userId: finalUserId });
+
+          connectionManager.sendMessageToConnection(ws.id, {
+            type: 'system',
+            status: 'initialized',
+            sessionId: finalSessionId,
+            userId: finalUserId,
+            message: `Session initialized. Session ID: ${finalSessionId}, User ID: ${finalUserId}`
           });
+          console.log(`WebSocket: Client ${ws.id} initialized with sessionId: ${finalSessionId}, userId: ${finalUserId}`);
 
-        // Original echo/ack logic is now handled by MessageRouter's simulated flow
+        } else {
+          // Regular message handling
+          const { sessionId, userId } = connDetails;
+          if (!sessionId || !userId) {
+             console.error(`WebSocket: Received message from uninitialized client ${ws.id}. Ignoring.`);
+             connectionManager.sendMessageToConnection(ws.id, { type: 'error', message: 'Connection not fully initialized. Please send init message first.' });
+             return;
+          }
+          // Pass sessionId and userId to messageRouter
+          messageRouter.handleIncomingMessage(ws.id, userId, sessionId, parsedMessage)
+            .catch(e => {
+              console.error(`WebSocket: Error processing message via MessageRouter for client ${ws.id}:`, e);
+              connectionManager.sendMessageToConnection(ws.id, {
+                type: 'error',
+                id: uuidv4(),
+                timestamp: new Date().toISOString(),
+                message: 'An error occurred while processing your message.',
+                details: e.message
+              });
+            });
+        }
 
-        // Example: Broadcast to others (for testing broadcast) - can be moved into MessageRouter if needed
-        // const broadcastPayload = { type: 'broadcast', from: ws.id, originalMessage: parsedMessage };
-        // connectionManager.broadcastMessage(broadcastPayload, ws.id);
-
-      } catch (e) {
-        console.error(`WebSocket: Failed to parse message from ${ws.id} or process:`, e);
+      } catch (e) { // Catches JSON parsing errors or other synchronous errors
+        console.error(`WebSocket: Failed to parse message from ${ws.id} or synchronous error in handler:`, e);
         connectionManager.sendMessageToConnection(ws.id, {
           type: 'error',
           id: uuidv4(),
           timestamp: new Date().toISOString(),
-          message: 'Invalid message format received. Please send JSON.',
+          message: 'Invalid message format or server error during processing.',
           originalMessage: messageBuffer.toString()
         });
         return;

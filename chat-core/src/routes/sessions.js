@@ -1,45 +1,26 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
-// const sessionManager = require('chat-session').sessionManager; // Placeholder for actual SessionManager
-// const connectionManager = require('../services/ConnectionManager'); // Placeholder for ConnectionManager
+const { SessionManager } = require('../../../chat-session/src');
+const connectionManager = require('../../services/ConnectionManager'); // Import ConnectionManager
 
 const router = express.Router();
-
-// Mock SessionManager for now, as it's from another module and not yet integrated.
-const mockSessionManager = {
-  createSession: async (userId) => {
-    console.log(`MockSessionManager: createSession called for userId: ${userId}`);
-    return { sessionId: `mockSessionId_${uuidv4().substring(0,8)}`, userId, createdAt: new Date().toISOString(), currentAgent: 'ai', lastActiveAt: new Date().toISOString() };
-  },
-  getSession: async (sessionId) => {
-    console.log(`MockSessionManager: getSession called for sessionId: ${sessionId}`);
-    if (sessionId === "nonexistent_session_id") return null;
-    return { sessionId, userId: `mockUser_${sessionId.substring(0,4)}`, createdAt: new Date().toISOString(), currentAgent: 'ai', lastActiveAt: new Date().toISOString() };
-  },
-  switchAgent: async (sessionId, newAgent) => {
-    console.log(`MockSessionManager: switchAgent called for sessionId: ${sessionId}, newAgent: ${newAgent}`);
-    return { success: true, newAgent };
-  },
-  getHistory: async (sessionId, limit) => {
-    console.log(`MockSessionManager: getHistory called for sessionId: ${sessionId}, limit: ${limit}`);
-    return [
-      { id: uuidv4(), from: 'user', text: 'Hello (from mock history)', timestamp: new Date(Date.now() - 10000).toISOString(), type: 'text', sessionId },
-      { id: uuidv4(), from: 'ai', text: 'AI: Hi there! (from mock history)', timestamp: new Date().toISOString(), type: 'text', sessionId }
-    ];
-  }
-};
-
+const sessionManager = new SessionManager();
 
 // POST /api/sessions (Create Session)
 router.post('/', async (req, res) => {
-  // In a real app, userId might come from auth middleware (e.g., req.user.id) or request body
-  const userId = req.body.userId || `user_${uuidv4().substring(0,8)}`;
+  const userIdFromBody = req.body.userId;
+  if (!userIdFromBody) {
+    // While SessionManager might handle null userId, API should define its contract
+    // For this iteration, let's make userId from body mandatory for this endpoint.
+    // Or allow SessionManager to create one if that's the desired behavior.
+    // The SessionManager throws if userId is missing, so this check is good.
+    return res.status(400).json({ error: 'userId is required in the request body.' });
+  }
   try {
-    // const session = await sessionManager.createSession(userId); // Real call
-    const session = await mockSessionManager.createSession(userId); // Mock call
+    const session = await sessionManager.createSession(userIdFromBody);
     res.status(201).json(session);
   } catch (error) {
-    console.error('API Error: /sessions (POST) -', error.message);
+    console.error('API Error: /sessions (POST) -', error.message, error.stack);
     res.status(500).json({ error: 'Failed to create session' });
   }
 });
@@ -47,16 +28,18 @@ router.post('/', async (req, res) => {
 // GET /api/sessions/:sessionId (Get Session Details)
 router.get('/:sessionId', async (req, res) => {
   const { sessionId } = req.params;
+  if (!sessionId) {
+    return res.status(400).json({ error: 'sessionId URL parameter is required.' });
+  }
   try {
-    // const session = await sessionManager.getSession(sessionId); // Real call
-    const session = await mockSessionManager.getSession(sessionId); // Mock call
+    const session = await sessionManager.getSession(sessionId);
     if (session) {
       res.json(session);
     } else {
       res.status(404).json({ error: 'Session not found' });
     }
   } catch (error) {
-    console.error(`API Error: /sessions/${sessionId} (GET) -`, error.message);
+    console.error(`API Error: /sessions/${sessionId} (GET) -`, error.message, error.stack);
     res.status(500).json({ error: 'Failed to get session details' });
   }
 });
@@ -64,54 +47,115 @@ router.get('/:sessionId', async (req, res) => {
 // POST /api/sessions/:sessionId/switch-agent (Switch Agent)
 router.post('/:sessionId/switch-agent', async (req, res) => {
   const { sessionId } = req.params;
-  const { agent: newAgent } = req.body; // Expecting { "agent": "human" } or { "agent": "ai" }
+  const { agent: newAgent } = req.body;
 
+  if (!sessionId) {
+    return res.status(400).json({ error: 'sessionId URL parameter is required.' });
+  }
   if (!newAgent || (newAgent !== 'ai' && newAgent !== 'human')) {
-    return res.status(400).json({ error: 'Invalid agent specified. Must be "ai" or "human".' });
+    return res.status(400).json({ error: 'Invalid agent specified in body. Must be "ai" or "human".' });
   }
 
   try {
-    // const result = await sessionManager.switchAgent(sessionId, newAgent); // Real call
-    const result = await mockSessionManager.switchAgent(sessionId, newAgent); // Mock call
+    // First, check if session exists to provide a more specific 404 if not.
+    // SessionManager.switchAgent might also throw its own "not found" error if an HSET is on a non-existent key,
+    // but ioredis hset on a non-existent key creates it.
+    // So, an explicit check here is better.
+    const sessionExists = await sessionManager.isSessionActive(sessionId);
+    if (!sessionExists) {
+      return res.status(404).json({ error: 'Session not found. Cannot switch agent.' });
+    }
 
-    if (result.success) { // Assuming switchAgent indicates success
-      console.log(`API: Agent switched to ${newAgent} for session ${sessionId}`);
-      // (Future enhancement: Simulate notifying client via WebSocket using connectionManager)
-      // const associatedConnectionId = findConnectionIdForSession(sessionId); // This mapping needs to be established
-      // if (associatedConnectionId) {
-      //   connectionManager.sendMessageToConnection(associatedConnectionId, { type: 'agent_switch', newAgent });
-      // }
-      res.json({ success: true, sessionId, newAgent });
-    } else {
-      // This path might not be reached if switchAgent throws on failure,
-      // but included for robustness if it could return { success: false }
-      res.status(400).json({ error: result.error || 'Failed to switch agent' });
+    const result = await sessionManager.switchAgent(sessionId, newAgent);
+
+    // The result from SessionManager.switchAgent is { success: true, newAgent }
+    console.log(`API: Agent switched to ${result.newAgent} for session ${sessionId}`);
+
+    // Notify connected WebSocket clients for this session
+    const allConnections = connectionManager.getAllConnections(); // Gets array of { ws, sessionId, userId }
+    let notifiedClients = 0;
+    for (const connDetails of allConnections) {
+      if (connDetails.sessionId === sessionId) {
+        const systemMessage = {
+          id: uuidv4(),
+          type: 'system',
+          from: 'system',
+          text: `Switched to ${result.newAgent} agent.`,
+          timestamp: new Date().toISOString(),
+          sessionId: sessionId,
+          newAgent: result.newAgent // Include new agent in the message
+        };
+        // connectionId is the key in ConnectionManager's map, which is ws.id
+        // connDetails.ws.id is not stored directly in connDetails, but connDetails IS the value from the map
+        // We need to iterate the map or have connectionId in connDetails to use sendMessageToConnection.
+        // Let's assume ConnectionManager stores connectionId in its details object for easier lookup,
+        // or we iterate differently.
+        // For now, let's use the ws object directly IF ConnectionManager's methods allow it,
+        // OR iterate keys if ConnectionManager stores by ws.id.
+        // The current ConnectionManager stores by ws.id (connectionId).
+        // getAllConnections() returns values: { ws, sessionId, userId }. We need the key.
+        // A better way: iterate `connectionManager.connections.forEach((details, connId) => ...)`
+
+        // Re-iterating to get connectionId (key of the map)
+        let connectionIdForWs;
+        for (const [id, details] of connectionManager.connections.entries()) {
+            if (details.ws === connDetails.ws && details.sessionId === sessionId) {
+                connectionIdForWs = id;
+                break;
+            }
+        }
+
+        if (connectionIdForWs) {
+            const sent = connectionManager.sendMessageToConnection(connectionIdForWs, systemMessage);
+            if (sent) {
+                notifiedClients++;
+                // Optionally, add this system message to history
+                try {
+                    await sessionManager.addMessage(sessionId, systemMessage);
+                    console.log(`API: Agent switch system message for session ${sessionId} also added to history.`);
+                } catch (historyError) {
+                    console.error(`API: Error adding agent switch system message to history for session ${sessionId}:`, historyError);
+                }
+            }
+        }
+      }
     }
+    if (notifiedClients > 0) {
+        console.log(`API: Notified ${notifiedClients} WebSocket client(s) about agent switch for session ${sessionId}.`);
+    }
+
+    res.json(result);
+
   } catch (error) {
-    console.error(`API Error: /sessions/${sessionId}/switch-agent (POST) -`, error.message);
-    // Check if error message indicates session not found, could return 404
-    if (error.message && error.message.toLowerCase().includes('not found')) {
-        return res.status(404).json({ error: 'Session not found, cannot switch agent.' });
-    }
-    res.status(500).json({ error: 'Failed to switch agent' });
+    console.error(`API Error: /sessions/${sessionId}/switch-agent (POST) -`, error.message, error.stack);
+    res.status(500).json({ error: `Failed to switch agent: ${error.message}` });
   }
 });
 
 // GET /api/sessions/:sessionId/history (Get History)
 router.get('/:sessionId/history', async (req, res) => {
   const { sessionId } = req.params;
-  const limit = parseInt(req.query.limit, 10) || 20;
+  const limitInput = req.query.limit;
+  const limit = limitInput ? parseInt(limitInput, 10) : 20;
 
-  if (limit <= 0) {
+  if (!sessionId) {
+    return res.status(400).json({ error: 'sessionId URL parameter is required.' });
+  }
+  if (isNaN(limit) || limit <= 0) { // Check if limit is NaN after parseInt or non-positive
     return res.status(400).json({ error: 'Limit must be a positive integer.' });
   }
 
   try {
-    // const history = await sessionManager.getHistory(sessionId, limit); // Real call
-    const history = await mockSessionManager.getHistory(sessionId, limit); // Mock call
+    // Check if session exists before trying to get history
+    const sessionExists = await sessionManager.isSessionActive(sessionId);
+    if (!sessionExists) {
+      return res.status(404).json({ error: 'Session not found.' });
+    }
+
+    const history = await sessionManager.getHistory(sessionId, limit);
     res.json(history);
   } catch (error) {
-    console.error(`API Error: /sessions/${sessionId}/history (GET) -`, error.message);
+    console.error(`API Error: /sessions/${sessionId}/history (GET) -`, error.message, error.stack);
     res.status(500).json({ error: 'Failed to get session history' });
   }
 });
