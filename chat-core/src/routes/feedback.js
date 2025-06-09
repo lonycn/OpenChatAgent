@@ -1,35 +1,63 @@
-const express = require('express');
+const express = require("express");
+const { v4: uuidv4 } = require("uuid");
+const { validateBody, feedbackSchema } = require("../middleware/validation");
+const { asyncHandler } = require("../middleware/error");
+
 const router = express.Router();
 
+// 模拟反馈存储服务
+const mockFeedbackService = {
+  async saveFeedback(feedback) {
+    console.log("MockFeedbackService: Saving feedback:", feedback);
+    // 模拟保存到数据库
+    return {
+      id: uuidv4(),
+      ...feedback,
+      createdAt: new Date().toISOString(),
+    };
+  },
+};
+
 // POST /api/feedback (Submit Feedback)
-router.post('/', (req, res) => {
-  const { sessionId, rating, comments } = req.body;
+router.post(
+  "/",
+  validateBody(feedbackSchema),
+  asyncHandler(async (req, res) => {
+    const { sessionId, rating, comment, messageId } = req.body;
+    const userId = req.user?.id;
 
-  if (sessionId === undefined || rating === undefined) {
-    return res.status(400).json({ error: 'Missing required fields: sessionId, rating.' });
-  }
+    // 创建反馈对象
+    const feedback = {
+      sessionId,
+      rating,
+      comment: comment || null,
+      messageId: messageId || null,
+      userId,
+      timestamp: new Date().toISOString(),
+    };
 
-  // Basic validation for rating (example: 1-5 integer, or true/false boolean)
-  // This depends on the desired rating system. For now, we'll be flexible.
-  if (typeof rating !== 'number' && typeof rating !== 'boolean') {
-      console.warn('Feedback API: Received rating of invalid type:', rating);
-      // Allow it for now, but in a real app, you'd enforce type.
-  }
-  if (typeof rating === 'number' && (rating < 1 || rating > 5) && Number.isInteger(rating)) {
-      // Only if it's an integer and outside 1-5. Floats or other numbers might be valid in some systems.
-      // console.warn('Feedback API: Received out-of-range integer rating:', rating);
-  }
+    // 保存反馈
+    const savedFeedback = await mockFeedbackService.saveFeedback(feedback);
 
+    // 记录反馈接收日志
+    console.log("Feedback received and processed:", {
+      id: savedFeedback.id,
+      sessionId,
+      rating,
+      userId,
+      hasComment: !!comment,
+      receivedAt: savedFeedback.createdAt,
+    });
 
-  // Log the feedback (actual storage would be a future enhancement)
-  console.log('Feedback received:', {
-    sessionId,
-    rating,
-    comments: comments || null, // Ensure comments is not undefined if missing
-    receivedAt: new Date().toISOString()
-  });
-
-  res.status(200).json({ success: true, message: 'Feedback received. Thank you!' });
-});
+    res.status(201).json({
+      success: true,
+      message: "Feedback received. Thank you!",
+      data: {
+        feedbackId: savedFeedback.id,
+        sessionId,
+      },
+    });
+  })
+);
 
 module.exports = router;

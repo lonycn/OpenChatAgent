@@ -1,67 +1,97 @@
-const express = require('express');
-const { v4: uuidv4 } = require('uuid');
+const express = require("express");
+const { v4: uuidv4 } = require("uuid");
+const Joi = require("joi");
+const { validateBody, messageSchema } = require("../middleware/validation");
+const { asyncHandler } = require("../middleware/error");
 // const messageRouter = require('../services/MessageRouter'); // Placeholder
 
 const router = express.Router();
 
 // Mock MessageRouter for now
 const mockMessageRouter = {
-  handleIncomingMessage: async (connectionId, userId, incomingMessage, source) => {
-    console.log(`MockMessageRouter: handleIncomingMessage called via ${source || 'websocket'} for userId: ${userId}`, incomingMessage);
+  handleIncomingMessage: async (
+    connectionId,
+    userId,
+    incomingMessage,
+    source
+  ) => {
+    console.log(
+      `MockMessageRouter: handleIncomingMessage called via ${
+        source || "websocket"
+      } for userId: ${userId}`,
+      incomingMessage
+    );
     // This mock simulates that handleIncomingMessage would eventually lead to an AI response.
     // For an HTTP request, the response is sent back via HTTP, not WebSocket.
     // So, this HTTP endpoint will directly craft the AI response.
     return {
       id: uuidv4(),
-      from: 'ai',
+      from: "ai",
       text: `AI HTTP Echo: ${incomingMessage.text}`,
       timestamp: new Date().toISOString(),
-      type: 'text',
-      sessionId: incomingMessage.sessionId // Assuming sessionId is passed in incomingMessage for HTTP
+      type: "text",
+      sessionId: incomingMessage.sessionId, // Assuming sessionId is passed in incomingMessage for HTTP
     };
-  }
+  },
 };
 
+// HTTP 消息模式定义
+const httpMessageSchema = messageSchema.keys({
+  sessionId: Joi.string().required(),
+  userId: Joi.string().optional(), // 从认证中间件获取
+});
+
 // POST /api/messages (Send Message via HTTP)
-router.post('/', async (req, res) => {
-  const { sessionId, userId, text, type = 'text' } = req.body;
+router.post(
+  "/",
+  validateBody(httpMessageSchema),
+  asyncHandler(async (req, res) => {
+    const { sessionId, text, type = "text", metadata } = req.body;
 
-  if (!sessionId || !userId || !text) {
-    return res.status(400).json({ error: 'Missing required fields: sessionId, userId, text.' });
-  }
+    // 优先使用认证用户的 ID
+    const userId = req.user?.id || req.body.userId;
 
-  try {
-    // In a real scenario, messageRouter.handleIncomingMessage might not directly return the AI response
-    // for an HTTP request. It might internally use connectionManager.sendMessageToConnection for WebSocket clients.
-    // For an HTTP source, it might just process and store messages, and this endpoint would then
-    // separately call an AI service or construct a response.
-    // For this simulation, we'll adapt:
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: "User authentication required",
+      });
+    }
 
-    console.log(`API POST /api/messages: Received HTTP message from userId: ${userId} for session: ${sessionId}`);
+    console.log(
+      `API POST /api/messages: Received HTTP message from userId: ${userId} for session: ${sessionId}`
+    );
 
-    // Simulate the part of MessageRouter that would get an AI response.
-    // The actual messageRouter.handleIncomingMessage is designed for WebSocket flow where it sends back via ConnectionManager.
-    // So, we directly simulate the AI response generation here.
-    const aiResponse = {
+    // 创建用户消息对象
+    const userMessage = {
       id: uuidv4(),
-      from: 'ai',
-      text: `AI HTTP Echo: ${text}`, // Simplified echo for HTTP
+      from: "user",
+      text,
+      type,
+      sessionId,
+      userId,
       timestamp: new Date().toISOString(),
-      type: 'text',
-      sessionId: sessionId,
-      userId: userId, // For context, though AI message might not always have userId directly
+      metadata: metadata || {},
     };
 
-    // Simulate adding user message and AI message to history (logging only for now)
-    console.log(`API POST /api/messages: (Simulated) Adding user message for session ${sessionId}: { text: "${text}" }`);
-    console.log(`API POST /api/messages: (Simulated) Adding AI response for session ${sessionId}: { text: "${aiResponse.text}" }`);
+    // 模拟调用 MessageRouter 处理消息
+    // 在实际实现中，这里会调用真正的 MessageRouter
+    const aiResponse = await mockMessageRouter.handleIncomingMessage(
+      null, // HTTP 请求没有 connectionId
+      userId,
+      userMessage,
+      "http"
+    );
 
-    res.status(200).json(aiResponse);
-
-  } catch (error) {
-    console.error('API Error: /messages (POST) -', error.message);
-    res.status(500).json({ error: 'Failed to process message' });
-  }
-});
+    // 返回 AI 响应
+    res.status(200).json({
+      success: true,
+      data: {
+        userMessage,
+        aiResponse,
+      },
+    });
+  })
+);
 
 module.exports = router;

@@ -243,10 +243,13 @@ Redis 会话状态管理
 
 ## 3
 
-TODO_chat-core.md - 消息网关模块
+[x] TODO_chat-core.md - 消息网关模块
 WebSocket + REST API
 消息路由和状态控制
 第 1 周开发重点
+
+## 4
+
 TODO_chat-ui.md - 前端聊天界面
 Ant Design X 聊天组件
 用户交互界面
