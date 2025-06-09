@@ -15,7 +15,9 @@
     "ws": "^8.5.0",
     "cors": "^2.8.5",
     "dotenv": "^16.0.0",
-    "uuid": "^8.3.2"
+    "uuid": "^8.3.2",
+    "chat-session": "file:../chat-session",
+    "ai-service": "file:../ai-service"
   },
   "devDependencies": {
     "jest": "^29.0.0",

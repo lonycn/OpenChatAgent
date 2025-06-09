@@ -1,141 +1,159 @@
-const messageRouter = require('../../src/services/MessageRouter');
-const connectionManager = require('../../src/services/ConnectionManager');
+// const messageRouter = require('../../src/services/MessageRouter'); // Import the instance
+// We need to test the class, so we might need to re-require or use jest.isolateModules
+const ConnectionManager = require('../../src/services/ConnectionManager'); // Real one for type checks, but will be mocked
 const { v4: uuidv4 } = require('uuid');
 
-// Mock dependencies
+// Mock external dependencies
 jest.mock('../../src/services/ConnectionManager');
 jest.mock('uuid');
 
-// MessageRouter uses internal mocks for aiService and sessionManager if not provided.
-// We can test with those internal mocks or provide more controlled mocks here.
-// For this test, we'll rely on its internal mocks for simplicity of testing MessageRouter's own logic.
+// Mock the imported modules from other packages
+const mockSessionManagerInstance = {
+  getSession: jest.fn(),
+  createSession: jest.fn(),
+  addMessage: jest.fn(),
+  getSessionAgent: jest.fn(),
+};
+jest.mock('../../chat-session/src', () => ({
+  SessionManager: jest.fn(() => mockSessionManagerInstance),
+}));
+
+const mockDashScopeClientInstance = {
+  sendMessage: jest.fn(),
+};
+jest.mock('../../ai-service/src', () => jest.fn(() => mockDashScopeClientInstance));
+
 
 describe('MessageRouter', () => {
+  let MessageRouterClass; // To get a fresh class definition
+  let messageRouterInstance; // Instance to test
+  let mockConnectionManager; // Instance of mocked ConnectionManager
+
   const mockConnectionId = 'conn-123';
   const mockUserId = 'user-abc';
-  let consoleLogSpy;
-  let consoleErrorSpy;
+  const mockSessionId = 'session-xyz';
 
   beforeEach(() => {
+    // Reset all mocks before each test
     uuidv4.mockClear();
-    connectionManager.sendMessageToConnection.mockClear();
+    mockSessionManagerInstance.getSession.mockReset();
+    mockSessionManagerInstance.createSession.mockReset();
+    mockSessionManagerInstance.addMessage.mockReset();
+    mockSessionManagerInstance.getSessionAgent.mockReset();
+    mockDashScopeClientInstance.sendMessage.mockReset();
 
-    // Spy on console messages if needed for specific tests
-    consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    // Get the mock of ConnectionManager that is auto-created by jest.mock
+    // The actual instance is imported by MessageRouter, so we use the mocked module's methods.
+    mockConnectionManager = require('../../src/services/ConnectionManager');
+    mockConnectionManager.sendMessageToConnection.mockClear();
+    mockConnectionManager.getConnection.mockReturnValue({ ws: {}, id: mockConnectionId }); // Ensure getConnection returns something
 
-    // Reset internal mocks of MessageRouter if they store state (not in this simple version)
-    // Or re-initialize messageRouter if its constructor sets up complex state with mocks.
-    // For the current MessageRouter, its internal mocks are stateless functions.
-  });
-
-  afterEach(() => {
-    consoleLogSpy.mockRestore();
-    consoleErrorSpy.mockRestore();
+    // Dynamically import MessageRouter to get a fresh instance with fresh mocks
+    // This is important because MessageRouter creates its service instances in constructor or uses singletons
+    jest.isolateModules(() => {
+      MessageRouterClass = require('../../src/services/MessageRouter').constructor; // Assuming default export is the class
+      // Or if it's a singleton: messageRouterInstance = require('../../src/services/MessageRouter');
+      // The current MessageRouter exports a singleton instance.
+      // For better testability of constructor-injected mocks, class should be exported.
+      // Let's assume we adjust MessageRouter to export the class for proper DI testing,
+      // or we test the singleton's behavior knowing it uses these top-level mocks.
+      // For now, testing the singleton that's exported:
+      messageRouterInstance = require('../../src/services/MessageRouter');
+    });
   });
 
   describe('handleIncomingMessage', () => {
-    const mockText = 'Hello AI';
-    const incomingMessage = { type: 'text', text: mockText };
-    const mockAiResponseText = `AI Echo: ${mockText}`;
+    const incomingText = 'Hello AI';
+    const incomingMessage = { type: 'text', text: incomingText };
     const mockUserMessageId = 'user-msg-id';
     const mockAiMessageId = 'ai-msg-id';
 
-    it('should process a valid message, simulate service calls, and send AI response', async () => {
-      uuidv4
-        .mockReturnValueOnce(mockUserMessageId) // For user message
-        .mockReturnValueOnce(mockAiMessageId);  // For AI message
+    it('should process message for AI agent, call services, and send AI response', async () => {
+      uuidv4.mockReturnValueOnce(mockUserMessageId).mockReturnValueOnce(mockAiMessageId);
+      mockSessionManagerInstance.getSessionAgent.mockResolvedValue('ai');
+      mockDashScopeClientInstance.sendMessage.mockResolvedValue(`AI says: ${incomingText}`);
 
-      await messageRouter.handleIncomingMessage(mockConnectionId, mockUserId, incomingMessage);
+      await messageRouterInstance.handleIncomingMessage(mockConnectionId, mockUserId, mockSessionId, incomingMessage);
 
-      // Check logging (examples)
-      expect(consoleLogSpy).toHaveBeenCalledWith(`MessageRouter: Handling incoming message from userId: ${mockUserId} on connectionId: ${mockConnectionId}`);
-      expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('MessageRouter: Attempting to get/create session for userId:'), mockUserId);
-      const expectedSessionId = `session_for_${mockUserId}_${mockConnectionId.substring(0,4)}`;
-      expect(consoleLogSpy).toHaveBeenCalledWith(`MessageRouter: Adding user message to session ${expectedSessionId}:`, mockUserMessageId);
-      expect(consoleLogSpy).toHaveBeenCalledWith(`MessageRouter: Sending message to AI service for sessionId: ${expectedSessionId}, Text: "${mockText}"`);
-      expect(consoleLogSpy).toHaveBeenCalledWith(`MessageRouter: AI response received for session ${expectedSessionId}:`, mockAiMessageId);
-      expect(consoleLogSpy).toHaveBeenCalledWith(`MessageRouter: Adding AI message to session ${expectedSessionId}:`, mockAiMessageId);
-
-      // Check that connectionManager was called to send the AI response
-      expect(connectionManager.sendMessageToConnection).toHaveBeenCalledTimes(1);
-      expect(connectionManager.sendMessageToConnection).toHaveBeenCalledWith(
-        mockConnectionId,
-        expect.objectContaining({
-          id: mockAiMessageId,
-          from: 'ai',
-          text: mockAiResponseText,
-          type: 'text',
-          sessionId: expectedSessionId,
-        })
-      );
+      expect(mockSessionManagerInstance.addMessage).toHaveBeenCalledTimes(2); // User and AI message
+      expect(mockSessionManagerInstance.addMessage).toHaveBeenCalledWith(mockSessionId, expect.objectContaining({
+        id: mockUserMessageId, from: 'user', text: incomingText, sessionId: mockSessionId, userId: mockUserId
+      }));
+      expect(mockSessionManagerInstance.getSessionAgent).toHaveBeenCalledWith(mockSessionId);
+      expect(mockDashScopeClientInstance.sendMessage).toHaveBeenCalledWith(mockSessionId, incomingText);
+      expect(mockSessionManagerInstance.addMessage).toHaveBeenCalledWith(mockSessionId, expect.objectContaining({
+        id: mockAiMessageId, from: 'ai', text: `AI says: ${incomingText}`, sessionId: mockSessionId
+      }));
+      expect(mockConnectionManager.sendMessageToConnection).toHaveBeenCalledWith(mockConnectionId, expect.objectContaining({
+        id: mockAiMessageId, from: 'ai', text: `AI says: ${incomingText}`
+      }));
     });
 
-    it('should handle missing connectionId and send error response', async () => {
+    it('should handle message for human agent and send system ACK', async () => {
+      uuidv4.mockReturnValueOnce(mockUserMessageId).mockReturnValueOnce('system-ack-id');
+      mockSessionManagerInstance.getSessionAgent.mockResolvedValue('human');
+
+      await messageRouterInstance.handleIncomingMessage(mockConnectionId, mockUserId, mockSessionId, incomingMessage);
+
+      expect(mockSessionManagerInstance.addMessage).toHaveBeenCalledTimes(1); // Only user message
+      expect(mockSessionManagerInstance.addMessage).toHaveBeenCalledWith(mockSessionId, expect.objectContaining({
+        id: mockUserMessageId, from: 'user', text: incomingText
+      }));
+      expect(mockSessionManagerInstance.getSessionAgent).toHaveBeenCalledWith(mockSessionId);
+      expect(mockDashScopeClientInstance.sendMessage).not.toHaveBeenCalled();
+      expect(mockConnectionManager.sendMessageToConnection).toHaveBeenCalledWith(mockConnectionId, expect.objectContaining({
+        id: 'system-ack-id', from: 'system', type: 'system_info', text: expect.stringContaining('Current agent is human')
+      }));
+    });
+
+    it('should send error to client if essential parameters are missing', async () => {
       uuidv4.mockReturnValueOnce('error-msg-id');
-      await messageRouter.handleIncomingMessage(null, mockUserId, incomingMessage);
+      await messageRouterInstance.handleIncomingMessage(mockConnectionId, null, mockSessionId, incomingMessage); // userId is null
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith('MessageRouter: connectionId, userId, and incomingMessage with text are required.');
-      expect(connectionManager.sendMessageToConnection).toHaveBeenCalledWith(
-        null, // connectionId is null
+      expect(mockConnectionManager.sendMessageToConnection).toHaveBeenCalledWith(mockConnectionId,
+        expect.objectContaining({ type: 'error', text: expect.stringContaining('Invalid message or missing user/session/connection information') })
+      );
+    });
+
+    it('should send error to client if getSessionAgent fails', async () => {
+      uuidv4.mockReturnValueOnce(mockUserMessageId).mockReturnValueOnce('error-msg-id');
+      mockSessionManagerInstance.getSessionAgent.mockRejectedValue(new Error('Redis unavailable'));
+
+      await messageRouterInstance.handleIncomingMessage(mockConnectionId, mockUserId, mockSessionId, incomingMessage);
+
+      expect(mockSessionManagerInstance.addMessage).toHaveBeenCalledTimes(1); // User message still added
+      expect(mockConnectionManager.sendMessageToConnection).toHaveBeenCalledWith(mockConnectionId,
+        expect.objectContaining({ type: 'error', text: 'Error determining current agent for your session.' })
+      );
+    });
+
+    it('should send error to client if aiService.sendMessage fails', async () => {
+      uuidv4.mockReturnValueOnce(mockUserMessageId) // user message
+              .mockReturnValueOnce('ai-error-system-msg-id') // system message about AI error
+              .mockReturnValueOnce(mockAiMessageId); // AI message (containing error text)
+      mockSessionManagerInstance.getSessionAgent.mockResolvedValue('ai');
+      mockDashScopeClientInstance.sendMessage.mockRejectedValue(new Error('AI service down'));
+
+      await messageRouterInstance.handleIncomingMessage(mockConnectionId, mockUserId, mockSessionId, incomingMessage);
+
+      // System message sent immediately upon AI error
+      expect(mockConnectionManager.sendMessageToConnection).toHaveBeenCalledWith(mockConnectionId,
         expect.objectContaining({
-          type: 'error',
-          text: 'Error: Invalid message or missing user/connection ID.'
+            id: 'ai-error-system-msg-id',
+            from: 'system',
+            text: 'Sorry, I encountered an error trying to reach the AI service.',
+            type: 'error'
         })
       );
-    });
-
-    it('should handle missing userId and send error response', async () => {
-      uuidv4.mockReturnValueOnce('error-msg-id');
-      await messageRouter.handleIncomingMessage(mockConnectionId, null, incomingMessage);
-
-      expect(consoleErrorSpy).toHaveBeenCalledWith('MessageRouter: connectionId, userId, and incomingMessage with text are required.');
-      expect(connectionManager.sendMessageToConnection).toHaveBeenCalledWith(
-        mockConnectionId,
+      // Then, the AI message (with error content) is also sent
+      expect(mockConnectionManager.sendMessageToConnection).toHaveBeenCalledWith(mockConnectionId,
         expect.objectContaining({
-          type: 'error',
-          text: 'Error: Invalid message or missing user/connection ID.'
+            id: mockAiMessageId,
+            from: 'ai',
+            text: 'Sorry, I encountered an error trying to reach the AI service.'
         })
       );
+      expect(mockSessionManagerInstance.addMessage).toHaveBeenCalledTimes(2); // User and AI (error) message
     });
-
-    it('should handle missing incomingMessage.text and send error response', async () => {
-      uuidv4.mockReturnValueOnce('error-msg-id');
-      await messageRouter.handleIncomingMessage(mockConnectionId, mockUserId, { type: 'text' }); // text is missing
-
-      expect(consoleErrorSpy).toHaveBeenCalledWith('MessageRouter: connectionId, userId, and incomingMessage with text are required.');
-      expect(connectionManager.sendMessageToConnection).toHaveBeenCalledWith(
-        mockConnectionId,
-        expect.objectContaining({
-          type: 'error',
-          text: 'Error: Invalid message or missing user/connection ID.'
-        })
-      );
-    });
-
-    it('should use incomingMessage.type if provided', async () => {
-      uuidv4.mockReturnValue(mockUserMessageId); // Only one uuidv4 call for user message id in this path
-      const customTypeMessage = { type: 'custom_event', text: 'Event Data' };
-
-      // We need to ensure the mocked addMessage in MessageRouter's internal mockSessionManager is called
-      // and we can inspect what it was called with.
-      // For this, we might need to expose or provide a more controllable mock for sessionManager.
-      // However, for now, we can check the log that indicates the user message creation.
-
-      await messageRouter.handleIncomingMessage(mockConnectionId, mockUserId, customTypeMessage);
-
-      // Check the log for user message creation to infer the type
-      // This is a bit indirect. A better way would be to mock sessionManager.addMessage and check its arguments.
-      expect(consoleLogSpy).toHaveBeenCalledWith(
-        `MessageRouter: Adding user message to session session_for_${mockUserId}_${mockConnectionId.substring(0,4)}:`,
-        mockUserMessageId
-      );
-      // To truly test this, MessageRouter's sessionManager.addMessage mock would need to be spied on,
-      // or MessageRouter would need to be instantiated with a Jest mock for sessionManager.
-      // The current test relies on the internal console.log which might not show the full userMessage object.
-      // For now, we assume the log implies the message was created.
-      // A more robust test would involve injecting a mock for sessionManager.
-    });
-
   });
 });
