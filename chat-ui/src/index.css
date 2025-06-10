@@ -1,0 +1,29 @@
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box; /* Ensure padding/border don't add to total size */
+}
+
+body {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color-scheme: light dark; /* Allows browser to set default colors based on user preference */
+
+  /* Default text/bg colors - these might be overridden by Ant Design's theme/reset */
+  color: rgba(255, 255, 255, 0.87); /* Default for dark mode */
+  background-color: #242424; /* Default for dark mode */
+}
+
+/* Example for light mode specific overrides if needed */
+@media (prefers-color-scheme: light) {
+  body {
+    color: #213547;
+    background-color: #ffffff;
+  }
+}
+
+/* Ensure App or a root div inside App also allows full height if needed */
+/* For now, ChatContainer directly controls its height relative to viewport. */
+/* The #root div being 100% height allows ChatContainer's 100vh based calculations to be more predictable. */
