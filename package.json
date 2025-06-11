@@ -1,0 +1,62 @@
+{
+    "name": "openchatagent",
+    "version": "1.0.0",
+    "description": "开源智能客服系统 - AI优先+人工接管",
+    "private": true,
+    "workspaces": [
+        "chat-ui",
+        "chat-core",
+        "ai-service",
+        "chat-session"
+    ],
+    "scripts": {
+        "install:all": "npm install && npm install --workspace=chat-ui && npm install --workspace=chat-core && npm install --workspace=ai-service && npm install --workspace=chat-session",
+        "dev": "concurrently -n \"ui,core,ai,session\" -c \"cyan,green,yellow,magenta\" \"npm run dev:ui\" \"npm run dev:core\" \"npm run dev:ai\" \"npm run dev:session\"",
+        "dev:ui": "cd chat-ui && npm run dev",
+        "dev:core": "cd chat-core && npm run dev",
+        "dev:ai": "cd ai-service && npm run dev",
+        "dev:session": "cd chat-session && npm run dev",
+        "start": "concurrently -n \"core,ai,session\" -c \"green,yellow,magenta\" \"npm run start:core\" \"npm run start:ai\" \"npm run start:session\"",
+        "start:ui": "cd chat-ui && npm run preview",
+        "start:core": "cd chat-core && npm start",
+        "start:ai": "cd ai-service && npm start",
+        "start:session": "cd chat-session && npm start",
+        "build": "npm run build:ui",
+        "build:ui": "cd chat-ui && npm run build",
+        "test": "npm run test:core && npm run test:ai && npm run test:session",
+        "test:core": "cd chat-core && npm test",
+        "test:ai": "cd ai-service && npm test",
+        "test:session": "cd chat-session && npm test",
+        "clean": "npm run clean:deps && npm run clean:build",
+        "clean:deps": "rm -rf node_modules chat-ui/node_modules chat-core/node_modules ai-service/node_modules chat-session/node_modules",
+        "clean:build": "rm -rf chat-ui/dist",
+        "env:setup": "node scripts/setup-env.js",
+        "cli": "node scripts/cli.js"
+    },
+    "devDependencies": {
+        "concurrently": "^8.2.2",
+        "chalk": "^4.1.2",
+        "inquirer": "^8.2.6",
+        "commander": "^11.1.0",
+        "cross-env": "^7.0.3"
+    },
+    "engines": {
+        "node": ">=16.0.0",
+        "npm": ">=8.0.0"
+    },
+    "keywords": [
+        "chatbot",
+        "ai",
+        "customer-service",
+        "alibaba",
+        "dashscope",
+        "react",
+        "nodejs"
+    ],
+    "author": "OpenChatAgent Contributors",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/your-org/OpenChatAgent.git"
+    }
+}

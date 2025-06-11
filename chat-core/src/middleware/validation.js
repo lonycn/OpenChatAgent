@@ -4,14 +4,23 @@ const Joi = require("joi");
  * 消息格式验证模式
  */
 const messageSchema = Joi.object({
-  type: Joi.string().valid("text", "image", "file", "system").required(),
+  id: Joi.string().optional(),
+  type: Joi.string()
+    .valid("text", "image", "file", "system", "init")
+    .required(),
   text: Joi.string().max(2000).when("type", {
     is: "text",
     then: Joi.required(),
     otherwise: Joi.optional(),
   }),
+  payload: Joi.object().when("type", {
+    is: "init",
+    then: Joi.required(),
+    otherwise: Joi.optional(),
+  }),
   metadata: Joi.object().optional(),
   sessionId: Joi.string().optional(),
+  userId: Joi.string().optional(),
   timestamp: Joi.string().isoDate().optional(),
 });
 

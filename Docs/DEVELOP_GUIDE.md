@@ -55,11 +55,46 @@
 
 ### 📦 技术建议
 
-- 使用 React + Ant Design X
+- 使用 React + Ant Design X (ProChat 组件)
 
 - 状态管理：useXChat + useXAgent
 
-- 消息下推：WebSocket
+- 消息下推：WebSocket (已实现)
+
+### 🔌 WebSocket 实现详情
+
+**连接流程**：
+
+1. 页面加载时自动建立 WebSocket 连接到 `ws://localhost:3001`
+2. 发送第一条消息时自动初始化会话（`type: 'init'`）
+3. 后续消息使用常规文本格式（`type: 'text'`）
+
+**消息格式**：
+
+```javascript
+// 初始化消息
+{
+  type: 'init',
+  payload: {
+    userId: 'generated-uuid',
+    initialMessage: { text: '用户消息', type: 'text' }
+  }
+}
+
+// 常规消息
+{
+  type: 'text',
+  text: '用户消息内容',
+  sessionId: 'session-uuid',
+  userId: 'user-uuid'
+}
+```
+
+**ProChat 配置**：
+
+- `request={false}` - 禁用 HTTP 请求模式
+- `modelProvider="custom"` - 使用自定义提供者
+- 完全通过 WebSocket 处理消息收发
 
 ---
 
@@ -89,11 +124,34 @@
 
 ### 📦 技术建议
 
-- Node.js + Express + ws
+- Node.js + Express + ws (已实现)
 
 - 会话状态：Redis
 
 - 日志记录：本地文件或 SQLite（开发期）
+
+### 🔌 WebSocket 服务器实现
+
+**核心功能**：
+
+- 连接管理：自动分配连接 ID，维护活跃连接池
+- 消息验证：使用 Joi 验证消息格式
+- 会话路由：根据消息类型路由到 AI 服务或人工客服
+- 错误处理：完善的异常处理和错误反馈机制
+
+**支持的消息类型**：
+
+- `init` - 会话初始化
+- `text` - 文本消息
+- `system` - 系统消息
+- `image` - 图片消息（预留）
+- `file` - 文件消息（预留）
+
+**API 端点**：
+
+- `GET /api/health` - 健康检查
+- `POST /api/openai/chat` - OpenAI 兼容接口（备用）
+- `POST /api/sessions/:id/switch-agent` - 切换代理
 
 ---
 
@@ -250,20 +308,23 @@ WebSocket + REST API
 
 ## 4
 
-TODO_chat-ui.md - 前端聊天界面
+[x] TODO_chat-ui.md - 前端聊天界面
 Ant Design X 聊天组件
 用户交互界面
 第 2 周开发重点
-TODO_chat-client.md - 多端客户端
+
+[] TODO_chat-client.md - 多端客户端
 uniapp 多端适配
 H5/小程序支持
 第 2 周开发重点
-TODO_chat-admin.md - 管理后台
+
+[] TODO_chat-admin.md - 管理后台
 客服工作台
 会话接管功能
 第 3 周开发重点
 🗺️ 总体规划文档
-TODO_MVP_ROADMAP.md - MVP 开发路线图
+
+[] TODO_MVP_ROADMAP.md - MVP 开发路线图
 4 周详细开发计划
 模块依赖关系图
 风险控制和成功指标

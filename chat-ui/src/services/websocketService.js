@@ -1,5 +1,9 @@
 let socket = null;
-const WS_URL = import.meta.env.VITE_CHAT_CORE_WS_URL || 'ws://localhost:3001';
+let isReconnecting = false;
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 3;
+const reconnectDelay = 2000; // 2秒
+const WS_URL = import.meta.env.VITE_CHAT_CORE_WS_URL || "ws://localhost:3001";
 
 /**
  * Establishes a WebSocket connection.
@@ -10,21 +14,45 @@ const WS_URL = import.meta.env.VITE_CHAT_CORE_WS_URL || 'ws://localhost:3001';
  * @param {function} eventHandlers.onError - Called when an error occurs.
  */
 function connect(eventHandlers = {}) {
-  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
-    console.log('WebSocket connection already open or opening.');
+  // 🚨 防止频繁重连
+  if (isReconnecting) {
+    console.log("WebSocket reconnection already in progress, skipping...");
     return;
   }
 
-  console.log(`Attempting to connect WebSocket to: ${WS_URL}`);
+  if (
+    socket &&
+    (socket.readyState === WebSocket.OPEN ||
+      socket.readyState === WebSocket.CONNECTING)
+  ) {
+    console.log("WebSocket connection already open or opening.");
+    return;
+  }
+
+  // 检查重连次数限制
+  if (reconnectAttempts >= maxReconnectAttempts) {
+    console.warn(
+      `WebSocket: 已达到最大重连次数 (${maxReconnectAttempts})，停止重连`
+    );
+    return;
+  }
+
+  isReconnecting = true;
+  reconnectAttempts++;
+
+  console.log(`WebSocket: 尝试连接 (第${reconnectAttempts}次) - ${WS_URL}`);
   socket = new WebSocket(WS_URL);
 
   socket.onopen = (event) => {
-    console.log('WebSocket connected successfully.');
+    console.log("✅ WebSocket connected successfully.");
+    isReconnecting = false; // 重置重连状态
+    reconnectAttempts = 0; // 重置重连计数
+
     if (eventHandlers.onOpen) {
       try {
         eventHandlers.onOpen(event);
       } catch (e) {
-        console.error('Error in onOpen handler:', e);
+        console.error("Error in onOpen handler:", e);
       }
     }
   };
@@ -37,21 +65,36 @@ function connect(eventHandlers = {}) {
         eventHandlers.onMessage(message);
       }
     } catch (e) {
-      console.error('Error parsing WebSocket message from server:', e, 'Raw data:', event.data);
+      console.error(
+        "Error parsing WebSocket message from server:",
+        e,
+        "Raw data:",
+        event.data
+      );
       // Optionally, call an error handler for parsing failure if defined
       // if (eventHandlers.onDataParseError) eventHandlers.onDataParseError(e, event.data);
     }
   };
 
   socket.onclose = (event) => {
-    console.log(`WebSocket disconnected. Code: ${event.code}, Reason: "${event.reason}", Clean: ${event.wasClean}`);
+    // 🔇 减少正常关闭的日志输出
+    if (event.code !== 1000 && event.code !== 1001) {
+      console.warn(
+        `⚠️ WebSocket异常断开. Code: ${event.code}, Reason: "${event.reason}"`
+      );
+    } else {
+      console.log(`🔌 WebSocket正常关闭. Code: ${event.code}`);
+    }
+
     const previousSocket = socket; // Keep a reference to the socket that closed
     socket = null; // Clear the global socket variable
+    isReconnecting = false; // 重置重连状态
+
     if (eventHandlers.onClose) {
       try {
         eventHandlers.onClose(event, previousSocket); // Pass event and the socket that closed
       } catch (e) {
-        console.error('Error in onClose handler:', e);
+        console.error("Error in onClose handler:", e);
       }
     }
   };
@@ -59,12 +102,12 @@ function connect(eventHandlers = {}) {
   socket.onerror = (event) => {
     // WebSocket Error objects are usually generic 'Event' types.
     // Specific error details might be found by inspecting the event or related logs.
-    console.error('WebSocket error:', event);
+    console.error("WebSocket error:", event);
     if (eventHandlers.onError) {
       try {
         eventHandlers.onError(event);
       } catch (e) {
-        console.error('Error in onError handler:', e);
+        console.error("Error in onError handler:", e);
       }
     }
     // Note: 'onclose' will usually be called after 'onerror' if the error leads to a disconnection.
@@ -82,10 +125,14 @@ function sendMessage(messageObject) {
       socket.send(messageString);
       // console.log('WebSocket message sent:', messageObject); // Can be noisy
     } catch (e) {
-      console.error('Error stringifying or sending WebSocket message:', e, messageObject);
+      console.error(
+        "Error stringifying or sending WebSocket message:",
+        e,
+        messageObject
+      );
     }
   } else {
-    console.error('WebSocket not connected. Message not sent:', messageObject);
+    console.error("WebSocket not connected. Message not sent:", messageObject);
     // TODO: Implement message queueing for offline support if needed.
   }
 }
@@ -95,10 +142,10 @@ function sendMessage(messageObject) {
  */
 function disconnect() {
   if (socket) {
-    console.log('WebSocket disconnecting...');
+    console.log("WebSocket disconnecting...");
     socket.close();
   } else {
-    console.log('WebSocket already disconnected or not initialized.');
+    console.log("WebSocket already disconnected or not initialized.");
   }
 }
 

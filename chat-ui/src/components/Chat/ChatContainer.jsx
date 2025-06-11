@@ -1,34 +1,60 @@
-import React, { useState, useEffect } from 'react';
-import { ProChat } from '@ant-design/pro-components';
-import { Button, Tag } from 'antd'; // Import Button and Tag
-import axios from 'axios';
+import React, { useState, useEffect, useMemo } from 'react';
+import { ProChat } from '@ant-design/pro-chat';
+import { Button, Tag, Switch, Card } from 'antd';
+import { ReloadOutlined, BugOutlined, ClearOutlined } from '@ant-design/icons';
 import * as websocketService from '../../services/websocketService';
 import { v4 as uuidv4 } from 'uuid';
+import WebSocketMonitor from '../Debug/WebSocketMonitor';
+import ChatErrorBoundary from '../ErrorBoundary/ChatErrorBoundary';
+import SimpleChatInterface from './SimpleChatInterface';
+import requestInterceptor from '../../utils/requestInterceptor';
 
 const API_URL = import.meta.env.VITE_CHAT_CORE_API_URL || 'http://localhost:3001/api';
 
 const ChatContainer = () => {
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSwitchingAgent, setIsSwitchingAgent] = useState(false);
-
   const [isConnected, setIsConnected] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false); // New state for connecting
-  const [currentAgent, setCurrentAgent] = useState('ai');
-  const [clientGeneratedUserId, setClientGeneratedUserId] = useState(null);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState(null);
+  const [currentAgent, setCurrentAgent] = useState('ai');
+  const [isSwitchingAgent, setIsSwitchingAgent] = useState(false);
+  const [clientGeneratedUserId, setClientGeneratedUserId] = useState(null);
+  const [showDebugMonitor, setShowDebugMonitor] = useState(true);
+  const [useSimpleInterface, setUseSimpleInterface] = useState(true); // 默认使用简单界面，更稳定
+  const [interceptorStats, setInterceptorStats] = useState({});
 
-  // Define event handlers outside of useEffect so they can be reused by handleNewSession
-  const wsEventHandlers = {
-    onOpen: (event) => {
-      console.log('ChatContainer: WebSocket connected', event);
-      setIsConnecting(false);
+  // 🚨 监听拦截器事件
+  useEffect(() => {
+    const handleHttpRequestBlocked = (event) => {
+      console.log('🚫 HTTP请求被拦截:', event.detail);
+      setInterceptorStats(requestInterceptor.getStats());
+    };
+
+    window.addEventListener('httpRequestBlocked', handleHttpRequestBlocked);
+
+    // 定期更新拦截器统计
+    const statsInterval = setInterval(() => {
+      setInterceptorStats(requestInterceptor.getStats());
+    }, 2000);
+
+    return () => {
+      window.removeEventListener('httpRequestBlocked', handleHttpRequestBlocked);
+      clearInterval(statsInterval);
+    };
+  }, []);
+
+  // WebSocket配置对象 - 使用useMemo确保只创建一次
+  const websocketConfig = useMemo(() => ({
+    onOpen: () => {
+      console.log('ChatContainer: WebSocket connected');
       setIsConnected(true);
+      setIsConnecting(false);
     },
     onMessage: (receivedMessage) => {
       console.log('ChatContainer: WebSocket message received:', receivedMessage);
-      setIsLoading(false); // Stop general loading on any message from server related to user's request
+      setIsLoading(false);
 
       if (receivedMessage.type === 'system' && receivedMessage.status === 'initialized') {
         setSessionId(receivedMessage.sessionId);
@@ -61,7 +87,7 @@ const ChatContainer = () => {
          if (receivedMessage.newAgent) {
           setCurrentAgent(receivedMessage.newAgent);
         }
-      } else if (receivedMessage.type === 'error') { // Server explicitly sends an error message
+      } else if (receivedMessage.type === 'error') {
          setMessages((prevMessages) => [
           ...prevMessages,
           {
@@ -71,7 +97,7 @@ const ChatContainer = () => {
             createTime: receivedMessage.timestamp ? new Date(receivedMessage.timestamp).getTime() : Date.now(),
           },
         ]);
-      } else { // Assume AI/assistant message
+      } else {
         setMessages((prevMessages) => [
           ...prevMessages,
           {
@@ -92,230 +118,352 @@ const ChatContainer = () => {
       console.error('ChatContainer: WebSocket error event:', errorEvent);
       setIsConnected(false);
       setIsConnecting(false);
-      setIsLoading(false); // Also stop general loading
+      setIsLoading(false);
       setMessages((prevMessages) => [
         ...prevMessages,
         {
           id: uuidv4(),
           role: 'system',
-          // Error events on WebSocket are often generic; specific error usually comes from server message or HTTP error
           content: 'Connection error. Please check your connection or try refreshing.',
           createTime: Date.now(),
         },
       ]);
     }
-  };
+  }), []); // 空依赖数组，只创建一次
 
-  // Effect for WebSocket connection management and userId generation
+  // 初始化用户ID
   useEffect(() => {
-    let localUserId = clientGeneratedUserId;
-    if (!localUserId) {
-      localUserId = uuidv4();
-      setClientGeneratedUserId(localUserId);
-      console.log('ChatContainer: Generated clientUserId:', localUserId);
+    if (!clientGeneratedUserId) {
+      const userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      setClientGeneratedUserId(userId);
+      console.log('ChatContainer: Generated client user ID:', userId);
     }
+  }, [clientGeneratedUserId]);
 
-    if (localUserId && !isConnected && !isConnecting) {
-        console.log('ChatContainer: useEffect initiating WebSocket connection attempt.');
+  // WebSocket连接管理 - 增加防抖和重连限制
+  useEffect(() => {
+    let connectionTimeout;
+    let reconnectCount = 0;
+    const maxReconnects = 3;
+    const reconnectDelay = 3000; // 3秒延迟
+
+    const attemptConnection = () => {
+      if (reconnectCount >= maxReconnects) {
+        console.warn(`ChatContainer: 已达到最大重连次数 (${maxReconnects})，停止重连`);
+        return;
+      }
+
+      if (clientGeneratedUserId && !isConnected && !isConnecting) {
+        console.log(`ChatContainer: 尝试连接WebSocket... (第${reconnectCount + 1}次)`);
         setIsConnecting(true);
-        websocketService.connect(wsEventHandlers);
-    }
-
-    return () => {
-      // Cleanup on unmount
-      // websocketService.disconnect(); // This might be too aggressive if component re-mounts often
-                                    // Let's make disconnect explicit via "New Session" or leaving page.
+        reconnectCount++;
+        
+        try {
+          websocketService.connect(websocketConfig);
+        } catch (error) {
+          console.error('ChatContainer: WebSocket连接失败:', error);
+          setIsConnecting(false);
+          
+          // 延迟重连
+          if (reconnectCount < maxReconnects) {
+            connectionTimeout = setTimeout(attemptConnection, reconnectDelay);
+          }
+        }
+      }
     };
-  }, [clientGeneratedUserId]); // Effect runs when clientGeneratedUserId is set.
 
-  // More specific useEffect for component unmount cleanup
-  useEffect(() => {
+    // 防抖连接 - 延迟500ms后再尝试连接
+    connectionTimeout = setTimeout(attemptConnection, 500);
+
+    // 清理函数
     return () => {
-        console.log("ChatContainer: Unmounting. Disconnecting WebSocket.");
-        websocketService.disconnect();
-    }
-  }, []);
+      if (connectionTimeout) {
+        clearTimeout(connectionTimeout);
+      }
+      console.log('ChatContainer: Component unmounting, disconnecting WebSocket...');
+      websocketService.disconnect();
+    };
+  }, [clientGeneratedUserId, isConnected, isConnecting, websocketConfig]);
 
-
-  const handleSendMessage = async (text) => {
-    if (!text || text.trim() === '') return true; // ProChat expects boolean true for success if no message sent.
-
-    if (!isConnected) {
-      console.error('ChatContainer: WebSocket not connected. Cannot send message.');
-      setMessages((prevMessages) => [...prevMessages, {
-        id: uuidv4(), role: 'system', content: 'Not connected. Please wait or refresh.', createTime: Date.now()
-      }]);
-      return true; // Or false if you want to indicate failure to ProChat
+  const handleSendMessage = async (message) => {
+    if (!message?.trim()) {
+      console.warn('ChatContainer: Empty message, ignoring');
+      return;
     }
 
+    console.log('ChatContainer: Sending message via WebSocket:', message);
     setIsLoading(true);
 
-    const userMessage = {
-      id: uuidv4(),
-      role: 'user',
-      content: text,
-      createTime: Date.now(),
-    };
-    setMessages((prevMessages) => [...prevMessages, userMessage]);
-    setInputValue('');
+    try {
+      if (!sessionId) {
+        // 第一条消息，需要初始化会话
+        console.log('ChatContainer: Initializing session with first message');
+        const initMessage = {
+          id: uuidv4(),
+          type: 'init',
+          payload: {
+            userId: clientGeneratedUserId,
+            initialMessage: {
+              text: message.trim(),
+              type: 'text'
+            }
+          },
+          timestamp: new Date().toISOString()
+        };
 
-    // If it's the first message and session isn't established, send 'init'
-    if (!sessionId) {
-      console.log('ChatContainer: Sending init message for userId:', clientGeneratedUserId);
-      websocketService.sendMessage({
-        id: userMessage.id,
-        type: 'init',
-        payload: {
-          userId: clientGeneratedUserId, // Use the generated one
-          initialMessage: {
-              text: userMessage.content,
-              type: 'text',
-              originalId: userMessage.id
-          }
-        },
-        timestamp: new Date(userMessage.createTime).toISOString()
-      });
-    } else {
-      // Session already initialized, send regular message
-      websocketService.sendMessage({
-        id: userMessage.id,
-        type: 'text',
-        text: userMessage.content,
-        timestamp: new Date(userMessage.createTime).toISOString(),
-        sessionId: sessionId,
-        userId: clientGeneratedUserId // Use the generated one
-      });
+        await websocketService.sendMessage(initMessage);
+      } else {
+        // 后续消息
+        const textMessage = {
+          id: uuidv4(),
+          type: 'text',
+          text: message.trim(),
+          sessionId: sessionId,
+          userId: clientGeneratedUserId,
+          timestamp: new Date().toISOString()
+        };
+
+        await websocketService.sendMessage(textMessage);
+      }
+
+      // 添加用户消息到UI
+      const userMessage = {
+        id: uuidv4(),
+        role: 'user',
+        content: message.trim(),
+        createTime: Date.now(),
+      };
+
+      setMessages((prevMessages) => [...prevMessages, userMessage]);
+      setInputValue(''); // 清空输入框
+
+    } catch (error) {
+      console.error('ChatContainer: Error sending message:', error);
+      setIsLoading(false);
+
+      const errorMessage = {
+        id: uuidv4(),
+        role: 'system',
+        content: `Failed to send message: ${error.message}`,
+        createTime: Date.now(),
+      };
+
+      setMessages((prevMessages) => [...prevMessages, errorMessage]);
     }
-    return true;
   };
 
-  const handleSwitchAgent = async (targetAgent) => {
+  const handleSwitchAgent = async () => {
     if (!sessionId) {
-      console.error('ChatContainer: Session not initialized. Cannot switch agent.');
-      setMessages((prevMessages) => [...prevMessages, {
-        id: uuidv4(), role: 'system', content: 'Error: Session not initialized. Please send a message first.', createTime: Date.now()
-      }]);
-      return;
-    }
-    if (targetAgent === currentAgent) {
-      console.log(`ChatContainer: Already with ${targetAgent} agent.`);
+      console.warn('ChatContainer: Cannot switch agent - no active session');
       return;
     }
 
+    console.log('ChatContainer: Switching agent from', currentAgent);
     setIsSwitchingAgent(true);
+
     try {
-      const response = await axios.post(`${API_URL}/sessions/${sessionId}/switch-agent`, {
-        agent: targetAgent,
+      const response = await fetch(`${API_URL}/sessions/${sessionId}/switch-agent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          currentAgent: currentAgent,
+          userId: clientGeneratedUserId
+        }),
       });
 
-      if (response.data && response.data.success) {
-        console.log(`ChatContainer: Agent switch to ${targetAgent} initiated successfully via API.`);
-        // The actual currentAgent state update should come from a WebSocket system message
-        // For immediate feedback, we can optimistically update, but WS message is source of truth.
-        // setCurrentAgent(targetAgent); // Optimistic update (optional, server message is better)
-        // A system message about the switch will be (or should be) pushed via WebSocket by the server
-        // and handled by the onMessage handler.
-      } else {
-        throw new Error(response.data.error || 'Failed to switch agent via API.');
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
+
+      const result = await response.json();
+      console.log('ChatContainer: Agent switch response:', result);
+
+      if (result.success) {
+        setCurrentAgent(result.newAgent);
+        
+        const systemMessage = {
+          id: uuidv4(),
+          role: 'system',
+          content: result.message || `Switched to ${result.newAgent} agent`,
+          createTime: Date.now(),
+        };
+
+        setMessages((prevMessages) => [...prevMessages, systemMessage]);
+      } else {
+        throw new Error(result.error || 'Failed to switch agent');
+      }
+
     } catch (error) {
       console.error('ChatContainer: Error switching agent:', error);
-      const errorMessage = error.response?.data?.error || error.message || 'An error occurred while switching agents.';
-      setMessages((prevMessages) => [...prevMessages, {
-        id: uuidv4(), role: 'system', content: `Error switching agent: ${errorMessage}`, createTime: Date.now()
-      }]);
+      
+      const errorMessage = {
+        id: uuidv4(),
+        role: 'system',
+        content: `Failed to switch agent: ${error.message}`,
+        createTime: Date.now(),
+      };
+
+      setMessages((prevMessages) => [...prevMessages, errorMessage]);
     } finally {
       setIsSwitchingAgent(false);
     }
   };
 
-  const handleNewSession = () => {
-    console.log('ChatContainer: Initiating new session...');
-    if (isConnected) {
-      websocketService.disconnect(); // Disconnect existing WebSocket
-    }
-    // Reset client-side state
-    setSessionId(null);
-    setMessages([]);
-    setCurrentAgent('ai'); // Reset to default agent
-    // isConnected will be set by onOpen/onClose handlers of the new connection
-    // No need to explicitly set setIsConnected(false) here as disconnect() should trigger onClose.
-    setInputValue('');
-    setIsLoading(false);
-    setIsSwitchingAgent(false);
-
-    // The useEffect for WebSocket connection will handle reconnecting
-    // if its dependencies are set up to do so (e.g. if it depended on userId which doesn't change here).
-    // Or, more explicitly, call connect again.
-    // The current useEffect for WebSocket connection only runs on mount/unmount due to [].
-    // So, we need to explicitly call connect.
-    // We need access to the eventHandlers defined in useEffect.
-    // For simplicity, let's redefine a minimal connect call here or abstract eventHandlers.
-    // For now, let's assume the useEffect's connect logic is what we want.
-    // To re-trigger useEffect's connect, we could change a dummy state that useEffect depends on.
-    // Or, more directly, call connect here.
-
-    // Let's make connect a bit more robust or re-callable.
-    // The current websocketService.connect already checks if socket exists.
-    // We need to pass the same eventHandlers.
-    // This implies eventHandlers should be defined outside or passed to handleNewSession.
-    // isConnected will be set by onOpen/onClose handlers of the new connection via wsEventHandlers
-    setInputValue('');
-    setIsLoading(false);
-    setIsSwitchingAgent(false);
-
-    // Explicitly call connect with the defined handlers
-    // This ensures a new connection attempt is made after state reset.
-    if (clientGeneratedUserId) { // Ensure userId is available before connecting
-        console.log('ChatContainer: handleNewSession explicitly calling websocketService.connect');
-        websocketService.connect(wsEventHandlers);
-    } else {
-        console.warn('ChatContainer: handleNewSession - clientGeneratedUserId not set, connect will be tried in useEffect');
-        // If clientGeneratedUserId is not set yet (e.g. if this was called too early),
-        // the useEffect will pick it up once setClientGeneratedUserId completes.
-    }
-    console.log('ChatContainer: Client state reset for new session. Connection attempt initiated.');
+  const handleClearStats = () => {
+    requestInterceptor.clearStats();
+    setInterceptorStats(requestInterceptor.getStats());
+    console.log('✅ 拦截器统计已清理');
   };
 
+  const handleRefresh = () => {
+    window.location.reload();
+  };
 
   return (
-    <div style={{ height: 'calc(100vh - 70px)', width: '100%', maxWidth: '700px', margin: '0 auto', display: 'flex', flexDirection: 'column'}}>
-      <div style={{ padding: '5px', background: '#f0f0f0', borderBottom: '1px solid #ccc', fontSize: '12px', textAlign: 'left' }}>
-        <p style={{margin:0}}>Connection: {isConnected ? 'Connected' : 'Disconnected'}</p>
-        <p style={{margin:0}}>User ID: {clientGeneratedUserId || 'Initializing...'}</p> {/* Updated to clientGeneratedUserId */}
-        <p style={{margin:0}}>Session ID: {sessionId || 'Not established'}</p>
-        <p style={{margin:0}}>Current Agent: {currentAgent}</p>
-      </div>
+    <div style={{ height: '100vh', display: 'flex', background: '#f5f5f5' }}>
+      {/* 左侧：聊天界面 */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'white' }}>
+        {/* 顶部控制栏 */}
+        <div style={{ 
+          padding: '12px 16px', 
+          borderBottom: '1px solid #f0f0f0',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          background: 'white'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Tag color={isConnected ? 'green' : 'red'}>
+              {isConnected ? '已连接' : '未连接'}
+            </Tag>
+            
+            <Tag color={currentAgent === 'ai' ? 'blue' : 'orange'}>
+              {currentAgent === 'ai' ? 'AI客服' : '人工客服'}
+            </Tag>
 
-      <div style={{ padding: '5px', borderBottom: '1px solid #ccc', display: 'flex', gap: '8px' }}>
-        {sessionId && currentAgent === 'ai' && (
-          <Button onClick={() => handleSwitchAgent('human')} loading={isSwitchingAgent} size="small">
-            Switch to Human Agent
-          </Button>
-        )}
-        {sessionId && currentAgent === 'human' && (
-          <Button onClick={() => handleSwitchAgent('ai')} loading={isSwitchingAgent} size="small">
-            Switch to AI Agent
-          </Button>
-        )}
-        <Button onClick={handleNewSession} size="small" danger={!!sessionId}>
-          New Session
-        </Button>
-      </div>
+            {sessionId && (
+              <Tag color="purple">
+                会话: {sessionId.substring(0, 8)}...
+              </Tag>
+            )}
 
-      <div style={{ flex: 1, overflow: 'hidden', height: '100%' }}> {/* Ensure this div takes up remaining space and allows ProChat to fill */}
-        <ProChat
-          messages={messages}
-          onSend={handleSendMessage}
-          input={inputValue}
-          onInputChange={setInputValue}
-          loading={isLoading || isSwitchingAgent} // Combine loading states for ProChat
-          // ProChat style: By default, ProChat might have its own height.
-          // To make it fill the container, you might need to ensure its parent has a defined height
-          // and ProChat itself is styled to take up 100% of that height if its default isn't sufficient.
-          // The `flex: 1` on the parent div should help.
-        />
+            {interceptorStats.totalBlocked > 0 && (
+              <Tag color="red">
+                🚫 已拦截: {interceptorStats.totalBlocked}
+              </Tag>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Switch
+              checked={useSimpleInterface}
+              onChange={setUseSimpleInterface}
+              checkedChildren="简单界面"
+              unCheckedChildren="ProChat"
+              size="small"
+            />
+            
+            <Switch
+              checked={showDebugMonitor}
+              onChange={setShowDebugMonitor}
+              checkedChildren="调试"
+              unCheckedChildren="调试"
+              size="small"
+            />
+
+            <Button
+              type="primary"
+              size="small"
+              onClick={handleSwitchAgent}
+              loading={isSwitchingAgent}
+              disabled={!sessionId}
+            >
+              {currentAgent === 'ai' ? '转人工' : 'AI接管'}
+            </Button>
+
+            <Button
+              size="small"
+              icon={<ClearOutlined />}
+              onClick={handleClearStats}
+              title="清理拦截器统计"
+            >
+              清理
+            </Button>
+
+            <Button
+              size="small"
+              icon={<ReloadOutlined />}
+              onClick={handleRefresh}
+              title="刷新页面"
+            >
+              刷新
+            </Button>
+          </div>
+        </div>
+
+        {/* 聊天区域 */}
+        <div style={{ flex: 1, overflow: 'hidden', height: '100%' }}>
+          <ChatErrorBoundary>
+            {useSimpleInterface ? (
+              <SimpleChatInterface
+                messages={messages}
+                onSend={handleSendMessage}
+                input={inputValue}
+                onInputChange={setInputValue}
+                loading={isLoading || isSwitchingAgent}
+                helloMessage="欢迎使用AI智能客服系统！请输入您的问题。"
+                placeholder="请输入您的问题..."
+              />
+            ) : (
+              <ProChat
+                messages={messages}
+                onSend={handleSendMessage}
+                input={inputValue}
+                onInputChange={setInputValue}
+                loading={isLoading || isSwitchingAgent}
+                // 🚨 完全禁用HTTP请求 - 使用最简配置
+                request={false}
+                // 基础配置
+                helloMessage="欢迎使用AI智能客服系统！请输入您的问题。"
+                placeholder="请输入您的问题..."
+                // 样式配置
+                style={{ height: '100%' }}
+                // 🔧 修复ProChat配置错误 - 使用最简配置
+                config={{
+                  enableHistoryCount: false,
+                  historyCount: 0,
+                  enablePlugins: false,
+                  enableAutoScroll: true,
+                  showTitle: false,
+                  showClearButton: false,
+                  showModelSwitcher: false,
+                  enableStreamRender: false
+                }}
+                // 禁用可能触发HTTP请求的功能
+                enablePlugins={false}
+                enableStreamRender={false}
+                modelProvider={null}
+                // 🚨 移除有问题的chatItemRenderConfig配置
+              />
+            )}
+          </ChatErrorBoundary>
+        </div>
       </div>
+      
+      {/* 右侧：调试监控面板 */}
+      {showDebugMonitor && (
+        <div style={{ width: '400px', display: 'flex', flexDirection: 'column' }}>
+          <WebSocketMonitor 
+            websocketService={websocketService}
+            isConnected={isConnected}
+            sessionId={sessionId}
+            interceptorStats={interceptorStats}
+            requestInterceptor={requestInterceptor}
+          />
+        </div>
+      )}
     </div>
   );
 };

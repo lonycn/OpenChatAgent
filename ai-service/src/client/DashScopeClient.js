@@ -12,10 +12,16 @@ class DashScopeClient {
       throw new Error("API key is required.");
     }
 
-    this.openai = new OpenAI({
-      apiKey: apiKey,
-      baseURL: DASHSCOPE_BASE_URL,
-    });
+    // Check if using demo mode
+    this.isDemoMode =
+      apiKey === "sk-your_api_key_here" || process.env.NODE_ENV === "demo";
+
+    if (!this.isDemoMode) {
+      this.openai = new OpenAI({
+        apiKey: apiKey,
+        baseURL: DASHSCOPE_BASE_URL,
+      });
+    }
 
     this.sessionContexts = {};
     this.knowledgeBaseConfigs = knowledgeBaseConfigs || [];
@@ -30,6 +36,47 @@ class DashScopeClient {
 
     // Add user message to context
     context.push({ role: "user", content: text });
+
+    // Demo mode: return simulated responses
+    if (this.isDemoMode) {
+      const demoResponses = [
+        "你好！我是AI助手，很高兴为您服务！请问有什么可以帮助您的吗？",
+        "我理解您的问题。作为AI助手，我会尽力为您提供帮助。",
+        "感谢您的提问！这是一个很有趣的话题。",
+        "我正在思考您的问题，让我为您提供一个详细的回答。",
+        "根据我的理解，这个问题涉及多个方面，让我逐一为您分析。",
+      ];
+
+      // Simple response selection based on message content
+      let aiResponseContent;
+      if (
+        text.includes("你好") ||
+        text.includes("hello") ||
+        text.includes("hi")
+      ) {
+        aiResponseContent = demoResponses[0];
+      } else {
+        aiResponseContent =
+          demoResponses[Math.floor(Math.random() * demoResponses.length)];
+      }
+
+      const aiMessageObject = { role: "assistant", content: aiResponseContent };
+
+      // Update context using manageContext
+      this.sessionContexts[sessionId] = manageContext(
+        this.sessionContexts[sessionId],
+        { role: "user", content: text },
+        aiMessageObject,
+        MAX_CONTEXT_MESSAGES
+      );
+
+      // Simulate API delay
+      await new Promise((resolve) =>
+        setTimeout(resolve, 500 + Math.random() * 1000)
+      );
+
+      return aiResponseContent;
+    }
 
     try {
       const completion = await this.openai.chat.completions.create({

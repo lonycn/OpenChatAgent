@@ -10,21 +10,24 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@ant-design/pro-chat": "^1.0.0",
+    "@ant-design/pro-components": "^2.7.0",
+    "antd": "^5.12.0",
+    "axios": "^1.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "antd": "^5.0.0",
-    "@ant-design/pro-components": "^2.0.0",
-    "axios": "^1.0.0",
     "uuid": "^9.0.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.15",
     "@types/react-dom": "^18.2.7",
     "@vitejs/plugin-react": "^4.0.3",
+    "axios-mock-adapter": "^2.1.0",
     "eslint": "^8.45.0",
     "eslint-plugin-react": "^7.32.2",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.3",
+    "msw": "^2.10.2",
     "vite": "^4.4.5"
   }
 }
