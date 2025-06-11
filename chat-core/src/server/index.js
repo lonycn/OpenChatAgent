@@ -12,7 +12,11 @@ const server = app.listen(PORT, () => {
 });
 
 // Initialize WebSocket server and attach it to the HTTP server
-const wss = initializeWebSocket(server);
+const { wss, monitor, errorHandler } = initializeWebSocket(server);
+
+// Set monitoring instances for health check routes
+const { setMonitoringInstances } = require('../routes/websocketHealth');
+setMonitoringInstances(monitor, errorHandler);
 
 // Handle graceful shutdown (optional, but good practice)
 process.on('SIGTERM', () => {

@@ -6,7 +6,7 @@ const Joi = require("joi");
 const messageSchema = Joi.object({
   id: Joi.string().optional(),
   type: Joi.string()
-    .valid("text", "image", "file", "system", "init")
+    .valid("text", "image", "file", "system", "init", "ping", "pong")
     .required(),
   text: Joi.string().max(2000).when("type", {
     is: "text",

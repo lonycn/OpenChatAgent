@@ -17,19 +17,19 @@ class RequestInterceptor {
   createLogger() {
     return {
       info: (message, data = {}) => {
-        console.log(`[RequestInterceptor] ${message}`, data);
+        // console.log(`[RequestInterceptor] ${message}`, data);
         this.logToFile("INFO", message, data);
       },
       warn: (message, data = {}) => {
-        console.warn(`[RequestInterceptor] ${message}`, data);
+        // console.warn(`[RequestInterceptor] ${message}`, data);
         this.logToFile("WARN", message, data);
       },
       error: (message, data = {}) => {
-        console.error(`[RequestInterceptor] ${message}`, data);
+        // console.error(`[RequestInterceptor] ${message}`, data);
         this.logToFile("ERROR", message, data);
       },
       debug: (message, data = {}) => {
-        console.debug(`[RequestInterceptor] ${message}`, data);
+        // console.debug(`[RequestInterceptor] ${message}`, data);
         this.logToFile("DEBUG", message, data);
       },
     };
@@ -63,6 +63,11 @@ class RequestInterceptor {
   }
 
   async sendLogToBackend(logEntry) {
+    // 防止日志发送错误导致无限循环
+    if (logEntry.url && logEntry.url.includes("/api/logs/frontend")) {
+      return; // 不发送日志相关的请求日志
+    }
+    
     try {
       // 异步发送日志到后端，不阻塞主流程
       setTimeout(async () => {

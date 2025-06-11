@@ -5,6 +5,7 @@ const Joi = require("joi");
 const { validateBody, messageSchema } = require("../middleware/validation");
 const { asyncHandler } = require("../middleware/error");
 const { logger } = require("../logger");
+const { router: websocketHealthRouter } = require("./websocketHealth");
 
 const router = express.Router();
 
@@ -20,6 +21,9 @@ router.get("/health", (req, res) => {
     version: "1.0.0",
   });
 });
+
+// WebSocket健康检查和监控路由
+router.use("/websocket", websocketHealthRouter);
 
 // ProChat兼容的聊天API端点
 router.post("/openai/chat", async (req, res) => {

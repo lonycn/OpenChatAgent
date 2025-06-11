@@ -181,7 +181,7 @@ const ChatContainer = () => {
         clearTimeout(connectionTimeout);
       }
       console.log('ChatContainer: Component unmounting, disconnecting WebSocket...');
-      websocketService.disconnect();
+        websocketService.disconnect();
     };
   }, [clientGeneratedUserId, isConnected, isConnecting, websocketConfig]);
 
@@ -199,26 +199,26 @@ const ChatContainer = () => {
         // 第一条消息，需要初始化会话
         console.log('ChatContainer: Initializing session with first message');
         const initMessage = {
-          id: uuidv4(),
-          type: 'init',
-          payload: {
+      id: uuidv4(),
+        type: 'init',
+        payload: {
             userId: clientGeneratedUserId,
-            initialMessage: {
+          initialMessage: {
               text: message.trim(),
               type: 'text'
-            }
-          },
+          }
+        },
           timestamp: new Date().toISOString()
         };
 
         await websocketService.sendMessage(initMessage);
-      } else {
+    } else {
         // 后续消息
         const textMessage = {
           id: uuidv4(),
-          type: 'text',
+        type: 'text',
           text: message.trim(),
-          sessionId: sessionId,
+        sessionId: sessionId,
           userId: clientGeneratedUserId,
           timestamp: new Date().toISOString()
         };
@@ -354,7 +354,7 @@ const ChatContainer = () => {
                 🚫 已拦截: {interceptorStats.totalBlocked}
               </Tag>
             )}
-          </div>
+      </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Switch
@@ -381,7 +381,7 @@ const ChatContainer = () => {
               disabled={!sessionId}
             >
               {currentAgent === 'ai' ? '转人工' : 'AI接管'}
-            </Button>
+          </Button>
 
             <Button
               size="small"
@@ -390,7 +390,7 @@ const ChatContainer = () => {
               title="清理拦截器统计"
             >
               清理
-            </Button>
+          </Button>
 
             <Button
               size="small"
@@ -399,9 +399,9 @@ const ChatContainer = () => {
               title="刷新页面"
             >
               刷新
-            </Button>
+        </Button>
           </div>
-        </div>
+      </div>
 
         {/* 聊天区域 */}
         <div style={{ flex: 1, overflow: 'hidden', height: '100%' }}>
@@ -417,11 +417,11 @@ const ChatContainer = () => {
                 placeholder="请输入您的问题..."
               />
             ) : (
-              <ProChat
-                messages={messages}
-                onSend={handleSendMessage}
-                input={inputValue}
-                onInputChange={setInputValue}
+        <ProChat
+          messages={messages}
+          onSend={handleSendMessage}
+          input={inputValue}
+          onInputChange={setInputValue}
                 loading={isLoading || isSwitchingAgent}
                 // 🚨 完全禁用HTTP请求 - 使用最简配置
                 request={false}

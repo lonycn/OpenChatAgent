@@ -151,7 +151,7 @@ Redis 数据存储
 
 ```bash
 # AI服务配置
-DASHSCOPE_API_KEY=your_api_key_here  # 阿里百炼API密钥
+DASHSCOPE_API_KEY=sk-your_api_key_here  # 阿里百炼API密钥
 
 # Redis配置
 REDIS_HOST=localhost

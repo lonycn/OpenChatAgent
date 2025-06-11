@@ -67,6 +67,72 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
+// 流式聊天端点
+app.post("/api/chat/stream", async (req, res) => {
+  try {
+    const { sessionId, message } = req.body;
+
+    if (!message) {
+      return res.status(400).json({ error: "Message is required" });
+    }
+
+    if (!aiClient) {
+      return res.json({
+        response: "抱歉，AI服务当前不可用。请检查API密钥配置。",
+      });
+    }
+
+    console.log(`🤖 Processing streaming message for session ${sessionId}: ${message}`);
+
+    // 设置SSE响应头
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Cache-Control'
+    });
+
+    let fullResponse = '';
+
+    try {
+      await aiClient.sendMessageStream(sessionId, message, (chunk) => {
+        fullResponse += chunk.content;
+        
+        // 发送SSE数据
+        const data = JSON.stringify({
+          content: chunk.content,
+          fullContent: chunk.fullContent,
+          isComplete: chunk.isComplete,
+          sessionId
+        });
+        
+        res.write(`data: ${data}\n\n`);
+        
+        // 如果完成，关闭连接
+        if (chunk.isComplete) {
+          res.end();
+        }
+      });
+    } catch (streamError) {
+      console.error("❌ Error in streaming:", streamError);
+      const errorData = JSON.stringify({
+        error: "Streaming error",
+        isComplete: true,
+        sessionId
+      });
+      res.write(`data: ${errorData}\n\n`);
+      res.end();
+    }
+  } catch (error) {
+    console.error("❌ Error in stream chat endpoint:", error);
+    res.status(500).json({
+      error: "Internal server error",
+      response: "抱歉，处理您的流式消息时出现错误。",
+    });
+  }
+});
+
 // 启动服务器
 app.listen(PORT, () => {
   console.log(`🤖 AI Service listening on http://localhost:${PORT}`);

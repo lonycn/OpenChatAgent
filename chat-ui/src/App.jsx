@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ConfigProvider, Button } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
-import ChatContainer from './components/Chat/ChatContainer';
+import RobustChatContainer from './components/RobustChatContainer';
 
 // 临时简化版本用于诊断问题
 const App = () => {
@@ -21,12 +21,12 @@ const App = () => {
   }, []);
 
   if (window.location.search.includes('restore=true') || showChat) {
-    return (
+  return (
       <ConfigProvider locale={zhCN}>
-        <ChatContainer />
+    <RobustChatContainer />
       </ConfigProvider>
-    );
-  }
+  );
+}
 
   return (
     <ConfigProvider locale={zhCN}>

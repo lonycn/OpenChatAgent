@@ -1,10 +1,17 @@
 const WebSocket = require("ws");
 const { v4: uuidv4 } = require("uuid");
-const connectionManager = require("../services/ConnectionManager");
+const connectionManager = require("../services/EnhancedConnectionManager");
 const messageRouter = require("../services/MessageRouter");
 const { authenticateWebSocket } = require("../middleware/auth");
 const { validateWebSocketMessage } = require("../middleware/validation");
 const { handleWebSocketError } = require("../middleware/error");
+const { WebSocketErrorHandler } = require("../utils/websocketErrorHandler");
+const WebSocketMonitor = require("../services/WebSocketMonitor");
+const wsConfig = require("../config/websocket");
+
+// Initialize error handler and monitor
+const errorHandler = new WebSocketErrorHandler();
+let monitor = null;
 
 function initializeWebSocket(httpServer) {
   if (!httpServer) {
@@ -68,6 +75,34 @@ function initializeWebSocket(httpServer) {
           const messageString = messageBuffer.toString();
           parsedMessage = JSON.parse(messageString);
 
+          // Handle heartbeat ping/pong
+          if (parsedMessage.type === 'ping') {
+            // Update connection activity and ping timestamp
+            connectionManager.updateActivity(ws.id);
+            connectionManager.updatePing(ws.id);
+            
+            // Respond with pong
+            const pongMessage = {
+              type: 'pong',
+              timestamp: Date.now(),
+              originalTimestamp: parsedMessage.timestamp
+            };
+            
+            connectionManager.sendMessageToConnection(ws.id, pongMessage);
+            console.log(`💓 Ping received from ${ws.id}, pong sent`);
+            return;
+          }
+          
+          if (parsedMessage.type === 'pong') {
+            // Update pong timestamp
+            connectionManager.updatePong(ws.id);
+            console.log(`💓 Pong received from ${ws.id}`);
+            return;
+          }
+
+          // Update connection activity for all valid messages
+          connectionManager.updateActivity(ws.id);
+          
           // 验证消息格式
           const validatedMessage = validateWebSocketMessage(parsedMessage);
 
@@ -119,20 +154,25 @@ function initializeWebSocket(httpServer) {
             }
           } else if (validatedMessage.type === "text") {
             // 常规文本消息
+            console.log(`WebSocket: Received text message from connection ${ws.id}:`, JSON.stringify(validatedMessage));
             let sessionId = ws.sessionId;
             if (!sessionId) {
+              console.log(`WebSocket: Creating new session for user ${userId}`);
               const sessionData =
                 await messageRouter.sessionManager.createSession(userId);
               sessionId = sessionData.sessionId || sessionData; // 兼容不同返回格式
               ws.sessionId = sessionId;
+              console.log(`WebSocket: New session created: ${sessionId}`);
             }
 
+            console.log(`WebSocket: Routing message to MessageRouter for session ${sessionId}`);
             await messageRouter.handleIncomingMessage(
               ws.id,
               userId,
               sessionId,
               validatedMessage
             );
+            console.log(`WebSocket: Message processing completed for session ${sessionId}`);
           } else {
             console.warn(
               `WebSocket: Unknown message type: ${validatedMessage.type}`
@@ -147,32 +187,55 @@ function initializeWebSocket(httpServer) {
       });
 
       ws.on("close", (code, reason) => {
+        // Use enhanced error handler for close events
+        const closeInfo = errorHandler.handleClose(code, reason, {
+          connectionId: ws.id,
+          userId: ws.userId,
+          sessionId: ws.sessionId
+        });
+        
+        // Use enhanced connection manager to remove connection
         connectionManager.removeConnection(ws.id);
-        const reasonString = reason ? reason.toString() : "No reason given";
-
-        // 🔇 减少断开连接的日志输出 - 仅记录异常断开
-        const remainingClients = connectionManager.getClientCount();
-        if (code !== 1001 && code !== 1000) {
-          // 只记录非正常关闭的连接
-          console.log(
-            `WebSocket: Client ${ws.id} disconnected abnormally. Code: ${code}, Reason: ${reasonString}. Total clients: ${remainingClients}`
-          );
-        } else if (remainingClients <= 3 || remainingClients % 5 === 0) {
-          console.log(
-            `WebSocket: Client ${ws.id} disconnected normally. Total clients: ${remainingClients}`
-          );
-        }
+        
+        // Emit close event with detailed information
+        connectionManager.emit('connectionClosed', {
+          connectionId: ws.id,
+          closeInfo
+        });
       });
 
-      ws.on("error", (error) => {
-        console.error(`WebSocket: Error on connection ${ws.id}:`, error);
-        handleWebSocketError(ws, error, { connectionId: ws.id });
+    ws.on("error", (error) => {
+      // Use enhanced error handler for error events
+      const errorInfo = errorHandler.handleError(error, {
+        connectionId: ws.id,
+        userId: ws.userId,
+        sessionId: ws.sessionId,
+        url: ws.url
+      });
+      
+      // Legacy error handling for compatibility
+      handleWebSocketError(error, ws);
+      
+      // Emit error event with detailed information
+      connectionManager.emit('connectionError', {
+        connectionId: ws.id,
+        errorInfo
       });
     });
   });
+  });
 
+  // Initialize monitoring
+  monitor = new WebSocketMonitor(connectionManager, {
+    metricsInterval: wsConfig.heartbeat.interval,
+    healthCheckInterval: wsConfig.heartbeat.interval,
+    enableAlerts: wsConfig.logging.level === 'debug'
+  });
+  
   console.log("WebSocket server initialized and attached to HTTP server.");
-  return wss;
+  console.log("WebSocket: Monitoring and error handling enabled");
+
+  return { wss, monitor, errorHandler };
 }
 
 module.exports = { initializeWebSocket };

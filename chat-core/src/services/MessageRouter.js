@@ -1,5 +1,5 @@
 const { v4: uuidv4 } = require("uuid");
-const connectionManager = require("./ConnectionManager");
+const connectionManager = require("./EnhancedConnectionManager");
 const axios = require("axios");
 
 // 通过HTTP API调用其他服务，而不是直接导入模块
@@ -21,6 +21,53 @@ class MessageRouter {
         } catch (error) {
           console.error("Error calling AI service:", error.message);
           return "Sorry, I encountered an error trying to reach the AI service.";
+        }
+      },
+      sendMessageStream: async (sessionId, text, onChunk) => {
+        try {
+          const response = await axios.post(`${AI_SERVICE_URL}/api/chat/stream`, {
+            sessionId,
+            message: text,
+          }, {
+            responseType: 'stream'
+          });
+          
+          let buffer = '';
+          
+          response.data.on('data', (chunk) => {
+            buffer += chunk.toString();
+            
+            // 处理SSE数据
+            const lines = buffer.split('\n');
+            buffer = lines.pop(); // 保留不完整的行
+            
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(line.slice(6));
+                  if (onChunk) {
+                    onChunk(data);
+                  }
+                } catch (parseError) {
+                  console.error('Error parsing SSE data:', parseError);
+                }
+              }
+            }
+          });
+          
+          return new Promise((resolve, reject) => {
+            response.data.on('end', () => {
+              resolve('Stream completed');
+            });
+            
+            response.data.on('error', (error) => {
+              console.error('Stream error:', error);
+              reject(error);
+            });
+          });
+        } catch (error) {
+          console.error("Error calling streaming AI service:", error.message);
+          throw error;
         }
       },
     };
@@ -157,42 +204,134 @@ class MessageRouter {
         console.log(
           `MessageRouter: Routing to AI for session: ${actualSessionId}, Text: "${userMessage.text}"`
         );
+        console.log(`MessageRouter: AI Service available: ${!!this.aiService}`);
+        console.log(`MessageRouter: AI Service sendMessage method: ${typeof this.aiService?.sendMessage}`);
 
-        let aiServiceResponseText;
-        try {
-          aiServiceResponseText = await this.aiService.sendMessage(
-            actualSessionId,
-            userMessage.text
+        // Check if AI service supports streaming
+        if (this.aiService.sendMessageStream && typeof this.aiService.sendMessageStream === 'function') {
+          console.log(`MessageRouter: Using streaming AI service for session ${actualSessionId}...`);
+          
+          const aiMessageId = uuidv4();
+          let fullAiResponse = '';
+          
+          try {
+            await this.aiService.sendMessageStream(
+              actualSessionId,
+              userMessage.text,
+              (data) => {
+                // Handle different data formats from SSE
+                if (data.error) {
+                  console.error(`MessageRouter: Stream error:`, data.error);
+                  return;
+                }
+                
+                const chunk = {
+                  content: data.content || '',
+                  fullContent: data.fullContent || '',
+                  isComplete: data.isComplete || false
+                };
+                
+                fullAiResponse = chunk.fullContent;
+                
+                // Send streaming chunk to client
+                const streamMessage = {
+                  id: aiMessageId,
+                  from: "ai",
+                  text: chunk.content,
+                  fullText: chunk.fullContent,
+                  timestamp: new Date().toISOString(),
+                  type: chunk.isComplete ? "response" : "stream",
+                  sessionId: actualSessionId,
+                  isComplete: chunk.isComplete
+                };
+                
+                console.log(`MessageRouter: Sending stream chunk to connection ${connectionId}, isComplete: ${chunk.isComplete}`);
+                connectionManager.sendMessageToConnection(connectionId, streamMessage);
+                
+                // If streaming is complete, save the full message to session
+                if (chunk.isComplete && chunk.fullContent) {
+                  const finalAiMessage = {
+                    id: aiMessageId,
+                    from: "ai",
+                    text: chunk.fullContent,
+                    timestamp: new Date().toISOString(),
+                    type: "text",
+                    sessionId: actualSessionId,
+                  };
+                  
+                  this.sessionManager.addMessage(actualSessionId, finalAiMessage)
+                    .then(() => {
+                      console.log(`MessageRouter: Final AI message saved to session ${actualSessionId}: ${aiMessageId}`);
+                    })
+                    .catch((error) => {
+                      console.error(`MessageRouter: Error saving final AI message to session ${actualSessionId}:`, error);
+                    });
+                }
+              }
+            );
+            
+            console.log(`MessageRouter: Streaming AI response completed for session ${actualSessionId}`);
+          } catch (aiError) {
+            console.error(
+              `MessageRouter: Error calling streaming AI service for session ${actualSessionId}:`,
+              aiError
+            );
+            
+            const errorMessage = {
+              id: aiMessageId,
+              from: "ai",
+              text: "Sorry, I encountered an error trying to reach the AI service.",
+              timestamp: new Date().toISOString(),
+              type: "response",
+              sessionId: actualSessionId,
+              isComplete: true
+            };
+            
+            await this.sessionManager.addMessage(actualSessionId, errorMessage);
+            connectionManager.sendMessageToConnection(connectionId, errorMessage);
+          }
+        } else {
+          // Fallback to non-streaming mode
+          let aiServiceResponseText;
+          try {
+            console.log(`MessageRouter: Calling non-streaming AI service for session ${actualSessionId}...`);
+            aiServiceResponseText = await this.aiService.sendMessage(
+              actualSessionId,
+              userMessage.text
+            );
+            console.log(`MessageRouter: AI service response received for session ${actualSessionId}: "${aiServiceResponseText}"`);
+          } catch (aiError) {
+            console.error(
+              `MessageRouter: Error calling AI service for session ${actualSessionId}:`,
+              aiError
+            );
+            aiServiceResponseText =
+              "Sorry, I encountered an error trying to reach the AI service.";
+            // Send error to client, but still log this "AI attempt" as an AI message.
+            // The client will see the AI's error message.
+          }
+
+          const aiMessage = {
+            id: uuidv4(),
+            from: "ai",
+            text: aiServiceResponseText,
+            timestamp: new Date().toISOString(),
+            type: "response",
+            sessionId: actualSessionId,
+          };
+          console.log(
+            `MessageRouter: AI response processed for session ${actualSessionId}: ${aiMessage.id}`
           );
-        } catch (aiError) {
-          console.error(
-            `MessageRouter: Error calling AI service for session ${actualSessionId}:`,
-            aiError
+
+          await this.sessionManager.addMessage(actualSessionId, aiMessage);
+          console.log(
+            `MessageRouter: AI message added to session ${actualSessionId}: ${aiMessage.id}`
           );
-          aiServiceResponseText =
-            "Sorry, I encountered an error trying to reach the AI service.";
-          // Send error to client, but still log this "AI attempt" as an AI message.
-          // The client will see the AI's error message.
+
+          console.log(`MessageRouter: Sending AI message to connection ${connectionId}:`, JSON.stringify(aiMessage));
+          connectionManager.sendMessageToConnection(connectionId, aiMessage);
         }
-
-        const aiMessage = {
-          id: uuidv4(),
-          from: "ai",
-          text: aiServiceResponseText,
-          timestamp: new Date().toISOString(),
-          type: "text",
-          sessionId: actualSessionId,
-        };
-        console.log(
-          `MessageRouter: AI response processed for session ${actualSessionId}: ${aiMessage.id}`
-        );
-
-        await this.sessionManager.addMessage(actualSessionId, aiMessage);
-        console.log(
-          `MessageRouter: AI message added to session ${actualSessionId}: ${aiMessage.id}`
-        );
-
-        connectionManager.sendMessageToConnection(connectionId, aiMessage);
+        console.log(`MessageRouter: AI message sent to connection ${connectionId}`);
       } else if (currentAgent === "human") {
         console.log(
           `MessageRouter: Message for session ${actualSessionId} to be handled by human agent: ${userMessage.text}`

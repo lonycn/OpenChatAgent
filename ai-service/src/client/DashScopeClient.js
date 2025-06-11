@@ -108,6 +108,129 @@ class DashScopeClient {
     }
   }
 
+  async sendMessageStream(sessionId, text, onChunk, retries = 1) {
+    if (!this.sessionContexts[sessionId]) {
+      this.sessionContexts[sessionId] = [];
+    }
+    const context = [...this.sessionContexts[sessionId]];
+
+    // Add user message to context
+    context.push({ role: "user", content: text });
+
+    // Demo mode: simulate streaming responses
+    if (this.isDemoMode) {
+      const demoResponses = [
+        "你好！我是AI助手，很高兴为您服务！请问有什么可以帮助您的吗？",
+        "我理解您的问题。作为AI助手，我会尽力为您提供帮助。",
+        "感谢您的提问！这是一个很有趣的话题。",
+        "我正在思考您的问题，让我为您提供一个详细的回答。",
+        "根据我的理解，这个问题涉及多个方面，让我逐一为您分析。",
+      ];
+
+      // Simple response selection based on message content
+      let aiResponseContent;
+      if (
+        text.includes("你好") ||
+        text.includes("hello") ||
+        text.includes("hi")
+      ) {
+        aiResponseContent = demoResponses[0];
+      } else {
+        aiResponseContent =
+          demoResponses[Math.floor(Math.random() * demoResponses.length)];
+      }
+
+      // Simulate streaming by sending chunks
+      const words = aiResponseContent.split('');
+      let fullContent = '';
+      
+      for (let i = 0; i < words.length; i++) {
+        const char = words[i];
+        fullContent += char;
+        
+        // Send chunk
+        if (onChunk) {
+          onChunk({
+            content: char,
+            fullContent: fullContent,
+            isComplete: i === words.length - 1
+          });
+        }
+        
+        // Simulate typing delay
+        await new Promise(resolve => setTimeout(resolve, 50 + Math.random() * 100));
+      }
+
+      const aiMessageObject = { role: "assistant", content: aiResponseContent };
+
+      // Update context using manageContext
+      this.sessionContexts[sessionId] = manageContext(
+        this.sessionContexts[sessionId],
+        { role: "user", content: text },
+        aiMessageObject,
+        MAX_CONTEXT_MESSAGES
+      );
+
+      return aiResponseContent;
+    }
+
+    try {
+      const completion = await this.openai.chat.completions.create({
+        model: this.defaultModel,
+        messages: context,
+        stream: true,
+      });
+
+      let fullContent = '';
+      
+      for await (const chunk of completion) {
+        if (chunk.choices && chunk.choices[0] && chunk.choices[0].delta && chunk.choices[0].delta.content) {
+          const content = chunk.choices[0].delta.content;
+          fullContent += content;
+          
+          // Send chunk to callback
+          if (onChunk) {
+            onChunk({
+              content: content,
+              fullContent: fullContent,
+              isComplete: false
+            });
+          }
+        }
+      }
+      
+      // Send completion signal
+      if (onChunk) {
+        onChunk({
+          content: '',
+          fullContent: fullContent,
+          isComplete: true
+        });
+      }
+
+      const aiMessageObject = { role: "assistant", content: fullContent };
+
+      // Update context using manageContext
+      this.sessionContexts[sessionId] = manageContext(
+        this.sessionContexts[sessionId],
+        { role: "user", content: text },
+        aiMessageObject,
+        MAX_CONTEXT_MESSAGES
+      );
+
+      return fullContent;
+    } catch (error) {
+      if (retries > 0) {
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+        return this.sendMessageStream(sessionId, text, onChunk, retries - 1);
+      } else {
+        throw new Error(
+          `Failed to get streaming response from DashScope after multiple retries: ${error.message}`
+        );
+      }
+    }
+  }
+
   async callKnowledge(query, knowledgeId) {
     if (!knowledgeId) {
       // This initial check can remain, or be removed if we prefer the config check to be the sole guard.

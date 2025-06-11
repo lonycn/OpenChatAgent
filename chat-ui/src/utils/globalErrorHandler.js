@@ -10,22 +10,22 @@ class GlobalErrorHandler {
     this.flushInterval = 5000; // 5秒批量发送
     this.isInitialized = false;
 
-    console.log("🔧 GlobalErrorHandler: 构造函数被调用");
+    // console.log("🔧 GlobalErrorHandler: 构造函数被调用");
     this.initialize();
   }
 
   initialize() {
     if (this.isInitialized) {
-      console.log("⚠️ GlobalErrorHandler: 已经初始化过了，跳过");
+      // console.log("⚠️ GlobalErrorHandler: 已经初始化过了，跳过");
       return;
     }
 
-    console.log("🚀 GlobalErrorHandler: 开始初始化...");
+    // console.log("🚀 GlobalErrorHandler: 开始初始化...");
 
     try {
       // 1. 全局未捕获异常处理
       window.addEventListener("error", (event) => {
-        console.log("🔴 GlobalErrorHandler: 捕获到全局错误", event);
+        // console.log("🔴 GlobalErrorHandler: 捕获到全局错误", event);
         this.handleError({
           type: "JavaScript Error",
           message: event.message,
@@ -39,7 +39,7 @@ class GlobalErrorHandler {
 
       // 2. Promise未捕获拒绝处理
       window.addEventListener("unhandledrejection", (event) => {
-        console.log("🔴 GlobalErrorHandler: 捕获到Promise拒绝", event);
+        // console.log("🔴 GlobalErrorHandler: 捕获到Promise拒绝", event);
         this.handleError({
           type: "Unhandled Promise Rejection",
           message:
@@ -101,9 +101,9 @@ class GlobalErrorHandler {
       }, this.flushInterval);
 
       this.isInitialized = true;
-      console.log("✅ GlobalErrorHandler: 初始化完成");
+      // console.log("✅ GlobalErrorHandler: 初始化完成");
     } catch (error) {
-      console.error("❌ GlobalErrorHandler: 初始化失败", error);
+      // console.error("❌ GlobalErrorHandler: 初始化失败", error);
     }
   }
 
@@ -113,15 +113,22 @@ class GlobalErrorHandler {
       const originalWarn = console.warn;
 
       console.error = (...args) => {
-        this.handleError({
-          type: "Console Error",
-          message: args
-            .map((arg) =>
-              typeof arg === "object" ? JSON.stringify(arg) : String(arg)
-            )
-            .join(" "),
-          level: "ERROR",
-        });
+        const message = args
+          .map((arg) =>
+            typeof arg === "object" ? JSON.stringify(arg) : String(arg)
+          )
+          .join(" ");
+        
+        // 避免拦截日志相关的控制台错误
+        if (!message.includes("/api/logs/frontend") && 
+            !message.includes("sendLogToBackend") && 
+            !message.includes("sendErrorToBackend")) {
+          this.handleError({
+            type: "Console Error",
+            message: message,
+            level: "ERROR",
+          });
+        }
         originalError.apply(console, args);
       };
 
@@ -134,10 +141,12 @@ class GlobalErrorHandler {
           .join(" ");
 
         if (
-          message.includes("findDOMNode") ||
+          (message.includes("findDOMNode") ||
           message.includes("ProChat") ||
           message.includes("enableHistoryCount") ||
-          message.includes("HTTP request")
+          message.includes("HTTP request")) &&
+          !message.includes("/api/logs/frontend") &&
+          !message.includes("sendLogToBackend")
         ) {
           this.handleError({
             type: "Console Warning",
@@ -148,12 +157,17 @@ class GlobalErrorHandler {
         originalWarn.apply(console, args);
       };
     } catch (error) {
-      console.error("❌ GlobalErrorHandler: 控制台拦截设置失败", error);
+      // console.error("❌ GlobalErrorHandler: 控制台拦截设置失败", error);
     }
   }
 
   handleError(errorInfo) {
     try {
+      // 防止日志相关错误的无限循环
+      if (this.isLogRelatedError(errorInfo)) {
+        return; // 直接返回，不处理日志相关的错误
+      }
+      
       const errorEntry = {
         id: uuidv4(),
         level: errorInfo.level || "ERROR",
@@ -188,17 +202,48 @@ class GlobalErrorHandler {
         this.errorBuffer = this.errorBuffer.slice(-this.maxBufferSize);
       }
 
-      // 同时记录到浏览器控制台（调试用）
-      console.group(`🔴 Global Error Handler: ${errorInfo.type}`);
-      console.error("Error Message:", errorInfo.message);
-      console.error("Error Data:", errorEntry.data);
-      console.groupEnd();
+      // 禁用控制台输出，避免被拦截器再次捕获导致无限循环
+      // console.group(`🔴 Global Error Handler: ${errorInfo.type}`);
+      // console.error("Error Message:", errorInfo.message);
+      // console.error("Error Data:", errorEntry.data);
+      // console.groupEnd();
     } catch (error) {
-      console.error("❌ GlobalErrorHandler: 处理错误时发生异常", error);
+      // 静默处理，避免无限循环
     }
   }
 
+  isLogRelatedError(errorInfo) {
+    const message = errorInfo.message || "";
+    const type = errorInfo.type || "";
+    const stack = errorInfo.stack || "";
+    const filename = errorInfo.filename || "";
+    
+    // 检查是否是日志相关的错误
+    const logPatterns = [
+      "/api/logs/frontend",
+      "logs/frontend",
+      "sendLogToBackend",
+      "sendErrorToBackend",
+      "flushErrorBuffer",
+      "Failed to send error to backend",
+      "Error sending log to backend",
+      "Failed to flush error buffer"
+    ];
+    
+    return logPatterns.some(pattern => 
+      message.includes(pattern) || 
+      type.includes(pattern) || 
+      stack.includes(pattern) || 
+      filename.includes(pattern)
+    );
+  }
+
   async sendErrorToBackend(errorEntry) {
+    // 防止日志发送错误导致无限循环
+    if (errorEntry.type === "HTTP Request Error" && errorEntry.message.includes("/api/logs/frontend")) {
+      return; // 直接返回，不发送日志相关的错误
+    }
+    
     try {
       const response = await fetch(BACKEND_LOG_URL, {
         method: "POST",
@@ -209,11 +254,10 @@ class GlobalErrorHandler {
       });
 
       if (!response.ok) {
-        console.warn("Failed to send error to backend:", response.statusText);
+        // 静默处理，不输出到控制台避免触发新的错误
       }
     } catch (error) {
-      console.warn("Error sending log to backend:", error);
-      // 避免无限循环 - 不再处理发送日志时的错误
+      // 静默处理，避免无限循环
     }
   }
 
@@ -222,6 +266,16 @@ class GlobalErrorHandler {
 
     try {
       const errors = [...this.errorBuffer];
+      // 过滤掉日志相关的错误，避免无限循环
+      const filteredErrors = errors.filter(error => 
+        !(error.type === "HTTP Request Error" && error.message.includes("/api/logs/frontend"))
+      );
+      
+      if (filteredErrors.length === 0) {
+        this.errorBuffer = [];
+        return;
+      }
+      
       this.errorBuffer = [];
 
       const response = await fetch(BACKEND_LOG_URL + "/batch", {
@@ -229,16 +283,14 @@ class GlobalErrorHandler {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ errors }),
+        body: JSON.stringify({ errors: filteredErrors }),
       });
 
       if (!response.ok) {
-        console.warn("Failed to flush error buffer:", response.statusText);
-        // 如果发送失败，重新加入缓冲区
-        this.errorBuffer.unshift(...errors);
+        // 静默处理失败，不重新加入缓冲区避免无限循环
       }
     } catch (error) {
-      console.warn("Error flushing buffer:", error);
+      // 静默处理错误
     }
   }
 
