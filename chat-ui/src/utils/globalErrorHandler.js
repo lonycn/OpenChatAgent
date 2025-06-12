@@ -1,7 +1,7 @@
 // 🚨 全局错误处理器 - 拦截所有错误并记录到日志
 import { v4 as uuidv4 } from "uuid";
 
-const BACKEND_LOG_URL = "http://localhost:3001/api/logs/frontend";
+const BACKEND_LOG_URL = "http://localhost:8002/api/logs/frontend";
 
 class GlobalErrorHandler {
   constructor() {
@@ -118,11 +118,13 @@ class GlobalErrorHandler {
             typeof arg === "object" ? JSON.stringify(arg) : String(arg)
           )
           .join(" ");
-        
+
         // 避免拦截日志相关的控制台错误
-        if (!message.includes("/api/logs/frontend") && 
-            !message.includes("sendLogToBackend") && 
-            !message.includes("sendErrorToBackend")) {
+        if (
+          !message.includes("/api/logs/frontend") &&
+          !message.includes("sendLogToBackend") &&
+          !message.includes("sendErrorToBackend")
+        ) {
           this.handleError({
             type: "Console Error",
             message: message,
@@ -142,9 +144,9 @@ class GlobalErrorHandler {
 
         if (
           (message.includes("findDOMNode") ||
-          message.includes("ProChat") ||
-          message.includes("enableHistoryCount") ||
-          message.includes("HTTP request")) &&
+            message.includes("ProChat") ||
+            message.includes("enableHistoryCount") ||
+            message.includes("HTTP request")) &&
           !message.includes("/api/logs/frontend") &&
           !message.includes("sendLogToBackend")
         ) {
@@ -167,7 +169,7 @@ class GlobalErrorHandler {
       if (this.isLogRelatedError(errorInfo)) {
         return; // 直接返回，不处理日志相关的错误
       }
-      
+
       const errorEntry = {
         id: uuidv4(),
         level: errorInfo.level || "ERROR",
@@ -217,7 +219,7 @@ class GlobalErrorHandler {
     const type = errorInfo.type || "";
     const stack = errorInfo.stack || "";
     const filename = errorInfo.filename || "";
-    
+
     // 检查是否是日志相关的错误
     const logPatterns = [
       "/api/logs/frontend",
@@ -227,23 +229,27 @@ class GlobalErrorHandler {
       "flushErrorBuffer",
       "Failed to send error to backend",
       "Error sending log to backend",
-      "Failed to flush error buffer"
+      "Failed to flush error buffer",
     ];
-    
-    return logPatterns.some(pattern => 
-      message.includes(pattern) || 
-      type.includes(pattern) || 
-      stack.includes(pattern) || 
-      filename.includes(pattern)
+
+    return logPatterns.some(
+      (pattern) =>
+        message.includes(pattern) ||
+        type.includes(pattern) ||
+        stack.includes(pattern) ||
+        filename.includes(pattern)
     );
   }
 
   async sendErrorToBackend(errorEntry) {
     // 防止日志发送错误导致无限循环
-    if (errorEntry.type === "HTTP Request Error" && errorEntry.message.includes("/api/logs/frontend")) {
+    if (
+      errorEntry.type === "HTTP Request Error" &&
+      errorEntry.message.includes("/api/logs/frontend")
+    ) {
       return; // 直接返回，不发送日志相关的错误
     }
-    
+
     try {
       const response = await fetch(BACKEND_LOG_URL, {
         method: "POST",
@@ -267,15 +273,19 @@ class GlobalErrorHandler {
     try {
       const errors = [...this.errorBuffer];
       // 过滤掉日志相关的错误，避免无限循环
-      const filteredErrors = errors.filter(error => 
-        !(error.type === "HTTP Request Error" && error.message.includes("/api/logs/frontend"))
+      const filteredErrors = errors.filter(
+        (error) =>
+          !(
+            error.type === "HTTP Request Error" &&
+            error.message.includes("/api/logs/frontend")
+          )
       );
-      
+
       if (filteredErrors.length === 0) {
         this.errorBuffer = [];
         return;
       }
-      
+
       this.errorBuffer = [];
 
       const response = await fetch(BACKEND_LOG_URL + "/batch", {

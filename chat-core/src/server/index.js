@@ -1,11 +1,11 @@
-const app = require('./app');
-const path = require('path');
-const { initializeWebSocket } = require('./websocket'); // Import WebSocket initializer
+const app = require("./app");
+const path = require("path");
+const { initializeWebSocket } = require("./websocket"); // Import WebSocket initializer
 
 // Load environment variables from .env in the root of chat-core
-require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
+require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 8002;
 
 const server = app.listen(PORT, () => {
   console.log(`Chat-core HTTP server running on port ${PORT}`);
@@ -15,17 +15,18 @@ const server = app.listen(PORT, () => {
 const { wss, monitor, errorHandler } = initializeWebSocket(server);
 
 // Set monitoring instances for health check routes
-const { setMonitoringInstances } = require('../routes/websocketHealth');
+const { setMonitoringInstances } = require("../routes/websocketHealth");
 setMonitoringInstances(monitor, errorHandler);
 
 // Handle graceful shutdown (optional, but good practice)
-process.on('SIGTERM', () => {
-  console.log('SIGTERM signal received: closing HTTP server');
+process.on("SIGTERM", () => {
+  console.log("SIGTERM signal received: closing HTTP server");
   server.close(() => {
-    console.log('HTTP server closed');
+    console.log("HTTP server closed");
     if (wss) {
-      wss.close(() => { // Close WebSocket server
-        console.log('WebSocket server closed');
+      wss.close(() => {
+        // Close WebSocket server
+        console.log("WebSocket server closed");
         process.exit(0);
       });
     } else {
@@ -34,13 +35,14 @@ process.on('SIGTERM', () => {
   });
 });
 
-process.on('SIGINT', () => {
-  console.log('SIGINT signal received: closing HTTP server');
+process.on("SIGINT", () => {
+  console.log("SIGINT signal received: closing HTTP server");
   server.close(() => {
-    console.log('HTTP server closed');
+    console.log("HTTP server closed");
     if (wss) {
-      wss.close(() => { // Close WebSocket server
-        console.log('WebSocket server closed');
+      wss.close(() => {
+        // Close WebSocket server
+        console.log("WebSocket server closed");
         process.exit(0);
       });
     } else {

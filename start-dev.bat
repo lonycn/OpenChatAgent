@@ -78,10 +78,12 @@ REM 启动所有服务
 echo.
 echo 🚀 启动所有开发服务...
 echo 📋 服务列表:
-echo   - chat-ui (前端): http://localhost:5173
-echo   - chat-core (API网关): http://localhost:3001
-echo   - ai-service (AI服务): http://localhost:3002
-echo   - chat-session (会话): http://localhost:3003
+echo   - chat-ui (用户前端): http://localhost:8001
+echo   - chat-core (API网关): http://localhost:8002
+echo   - ai-service (AI服务): http://localhost:8003
+echo   - chat-session (会话服务): http://localhost:8004
+echo   - admin-api (管理后台API): http://localhost:8005
+echo   - admin-ui (管理后台前端): http://localhost:8006
 echo.
 echo ⚠️ 按 Ctrl+C 停止所有服务
 echo.

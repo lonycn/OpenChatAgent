@@ -25,43 +25,47 @@ class MessageRouter {
       },
       sendMessageStream: async (sessionId, text, onChunk) => {
         try {
-          const response = await axios.post(`${AI_SERVICE_URL}/api/chat/stream`, {
-            sessionId,
-            message: text,
-          }, {
-            responseType: 'stream'
-          });
-          
-          let buffer = '';
-          
-          response.data.on('data', (chunk) => {
+          const response = await axios.post(
+            `${AI_SERVICE_URL}/api/chat/stream`,
+            {
+              sessionId,
+              message: text,
+            },
+            {
+              responseType: "stream",
+            }
+          );
+
+          let buffer = "";
+
+          response.data.on("data", (chunk) => {
             buffer += chunk.toString();
-            
+
             // 处理SSE数据
-            const lines = buffer.split('\n');
+            const lines = buffer.split("\n");
             buffer = lines.pop(); // 保留不完整的行
-            
+
             for (const line of lines) {
-              if (line.startsWith('data: ')) {
+              if (line.startsWith("data: ")) {
                 try {
                   const data = JSON.parse(line.slice(6));
                   if (onChunk) {
                     onChunk(data);
                   }
                 } catch (parseError) {
-                  console.error('Error parsing SSE data:', parseError);
+                  console.error("Error parsing SSE data:", parseError);
                 }
               }
             }
           });
-          
+
           return new Promise((resolve, reject) => {
-            response.data.on('end', () => {
-              resolve('Stream completed');
+            response.data.on("end", () => {
+              resolve("Stream completed");
             });
-            
-            response.data.on('error', (error) => {
-              console.error('Stream error:', error);
+
+            response.data.on("error", (error) => {
+              console.error("Stream error:", error);
               reject(error);
             });
           });
@@ -205,15 +209,23 @@ class MessageRouter {
           `MessageRouter: Routing to AI for session: ${actualSessionId}, Text: "${userMessage.text}"`
         );
         console.log(`MessageRouter: AI Service available: ${!!this.aiService}`);
-        console.log(`MessageRouter: AI Service sendMessage method: ${typeof this.aiService?.sendMessage}`);
+        console.log(
+          `MessageRouter: AI Service sendMessage method: ${typeof this.aiService
+            ?.sendMessage}`
+        );
 
         // Check if AI service supports streaming
-        if (this.aiService.sendMessageStream && typeof this.aiService.sendMessageStream === 'function') {
-          console.log(`MessageRouter: Using streaming AI service for session ${actualSessionId}...`);
-          
+        if (
+          this.aiService.sendMessageStream &&
+          typeof this.aiService.sendMessageStream === "function"
+        ) {
+          console.log(
+            `MessageRouter: Using streaming AI service for session ${actualSessionId}...`
+          );
+
           const aiMessageId = uuidv4();
-          let fullAiResponse = '';
-          
+          let fullAiResponse = "";
+
           try {
             await this.aiService.sendMessageStream(
               actualSessionId,
@@ -224,15 +236,15 @@ class MessageRouter {
                   console.error(`MessageRouter: Stream error:`, data.error);
                   return;
                 }
-                
+
                 const chunk = {
-                  content: data.content || '',
-                  fullContent: data.fullContent || '',
-                  isComplete: data.isComplete || false
+                  content: data.content || "",
+                  fullContent: data.fullContent || "",
+                  isComplete: data.isComplete || false,
                 };
-                
+
                 fullAiResponse = chunk.fullContent;
-                
+
                 // Send streaming chunk to client
                 const streamMessage = {
                   id: aiMessageId,
@@ -242,12 +254,17 @@ class MessageRouter {
                   timestamp: new Date().toISOString(),
                   type: chunk.isComplete ? "response" : "stream",
                   sessionId: actualSessionId,
-                  isComplete: chunk.isComplete
+                  isComplete: chunk.isComplete,
                 };
-                
-                console.log(`MessageRouter: Sending stream chunk to connection ${connectionId}, isComplete: ${chunk.isComplete}`);
-                connectionManager.sendMessageToConnection(connectionId, streamMessage);
-                
+
+                console.log(
+                  `MessageRouter: Sending stream chunk to connection ${connectionId}, isComplete: ${chunk.isComplete}`
+                );
+                connectionManager.sendMessageToConnection(
+                  connectionId,
+                  streamMessage
+                );
+
                 // If streaming is complete, save the full message to session
                 if (chunk.isComplete && chunk.fullContent) {
                   const finalAiMessage = {
@@ -258,25 +275,33 @@ class MessageRouter {
                     type: "text",
                     sessionId: actualSessionId,
                   };
-                  
-                  this.sessionManager.addMessage(actualSessionId, finalAiMessage)
+
+                  this.sessionManager
+                    .addMessage(actualSessionId, finalAiMessage)
                     .then(() => {
-                      console.log(`MessageRouter: Final AI message saved to session ${actualSessionId}: ${aiMessageId}`);
+                      console.log(
+                        `MessageRouter: Final AI message saved to session ${actualSessionId}: ${aiMessageId}`
+                      );
                     })
                     .catch((error) => {
-                      console.error(`MessageRouter: Error saving final AI message to session ${actualSessionId}:`, error);
+                      console.error(
+                        `MessageRouter: Error saving final AI message to session ${actualSessionId}:`,
+                        error
+                      );
                     });
                 }
               }
             );
-            
-            console.log(`MessageRouter: Streaming AI response completed for session ${actualSessionId}`);
+
+            console.log(
+              `MessageRouter: Streaming AI response completed for session ${actualSessionId}`
+            );
           } catch (aiError) {
             console.error(
               `MessageRouter: Error calling streaming AI service for session ${actualSessionId}:`,
               aiError
             );
-            
+
             const errorMessage = {
               id: aiMessageId,
               from: "ai",
@@ -284,22 +309,29 @@ class MessageRouter {
               timestamp: new Date().toISOString(),
               type: "response",
               sessionId: actualSessionId,
-              isComplete: true
+              isComplete: true,
             };
-            
+
             await this.sessionManager.addMessage(actualSessionId, errorMessage);
-            connectionManager.sendMessageToConnection(connectionId, errorMessage);
+            connectionManager.sendMessageToConnection(
+              connectionId,
+              errorMessage
+            );
           }
         } else {
           // Fallback to non-streaming mode
           let aiServiceResponseText;
           try {
-            console.log(`MessageRouter: Calling non-streaming AI service for session ${actualSessionId}...`);
+            console.log(
+              `MessageRouter: Calling non-streaming AI service for session ${actualSessionId}...`
+            );
             aiServiceResponseText = await this.aiService.sendMessage(
               actualSessionId,
               userMessage.text
             );
-            console.log(`MessageRouter: AI service response received for session ${actualSessionId}: "${aiServiceResponseText}"`);
+            console.log(
+              `MessageRouter: AI service response received for session ${actualSessionId}: "${aiServiceResponseText}"`
+            );
           } catch (aiError) {
             console.error(
               `MessageRouter: Error calling AI service for session ${actualSessionId}:`,
@@ -328,10 +360,15 @@ class MessageRouter {
             `MessageRouter: AI message added to session ${actualSessionId}: ${aiMessage.id}`
           );
 
-          console.log(`MessageRouter: Sending AI message to connection ${connectionId}:`, JSON.stringify(aiMessage));
+          console.log(
+            `MessageRouter: Sending AI message to connection ${connectionId}:`,
+            JSON.stringify(aiMessage)
+          );
           connectionManager.sendMessageToConnection(connectionId, aiMessage);
         }
-        console.log(`MessageRouter: AI message sent to connection ${connectionId}`);
+        console.log(
+          `MessageRouter: AI message sent to connection ${connectionId}`
+        );
       } else if (currentAgent === "human") {
         console.log(
           `MessageRouter: Message for session ${actualSessionId} to be handled by human agent: ${userMessage.text}`

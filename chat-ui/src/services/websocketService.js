@@ -3,7 +3,7 @@ let isReconnecting = false;
 let reconnectAttempts = 0;
 const maxReconnectAttempts = 3;
 const reconnectDelay = 2000; // 2秒
-const WS_URL = import.meta.env.VITE_CHAT_CORE_WS_URL || "ws://localhost:3001";
+const WS_URL = import.meta.env.VITE_CHAT_CORE_WS_URL || "ws://localhost:8002";
 
 /**
  * Establishes a WebSocket connection.

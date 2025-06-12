@@ -4,7 +4,7 @@ const SessionManager = require("./managers/SessionManager");
 require("dotenv").config();
 
 const app = express();
-const PORT = process.env.PORT || 3003;
+const PORT = process.env.PORT || 8004;
 
 // 中间件
 app.use(cors());

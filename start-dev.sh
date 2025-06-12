@@ -5,6 +5,26 @@
 
 echo "🤖 OpenChatAgent 开发环境启动..."
 
+# 清理可能残留的进程
+echo "🛑 清理可能残留的开发进程..."
+pkill -f "npm.*dev" 2>/dev/null
+pkill -f "nodemon" 2>/dev/null
+pkill -f "vite" 2>/dev/null
+pkill -f "max dev" 2>/dev/null
+
+# 释放可能占用的端口
+for port in 8001 8002 8003 8004 8005 8006; do
+    pid=$(lsof -ti:$port 2>/dev/null)
+    if [ ! -z "$pid" ]; then
+        echo "  🔌 释放端口 $port (PID: $pid)"
+        kill -9 $pid 2>/dev/null
+    fi
+done
+
+# 等待进程完全停止
+sleep 2
+echo "✅ 进程清理完成"
+
 # 检查是否存在 .env 文件
 if [ ! -f ".env" ]; then
     echo "⚠️  根目录 .env 文件不存在"
@@ -46,16 +66,16 @@ if [ ! -d "node_modules" ]; then
 fi
 
 # 检查各模块依赖
-for module in "chat-ui" "chat-core" "ai-service" "chat-session"; do
+for module in "chat-ui" "chat-core" "ai-service" "chat-session" "chat-admin"; do
     if [ -d "$module" ] && [ ! -d "$module/node_modules" ]; then
         echo "📦 安装 $module 依赖..."
         cd "$module" && npm install && cd ..
     fi
 done
 
-# 设置各模块环境变量
-echo "⚙️  设置环境变量..."
-node scripts/setup-env.js
+# 同步环境配置到各子项目
+echo "⚙️  同步环境配置..."
+node scripts/sync-env.js
 
 # 检查 Redis 连接（可选）
 echo "🔍 检查 Redis 连接..."
@@ -72,10 +92,12 @@ fi
 echo ""
 echo "🚀 启动所有开发服务..."
 echo "📋 服务列表:"
-echo "  - chat-ui (前端): http://localhost:5173"
-echo "  - chat-core (API网关): http://localhost:3001"
-echo "  - ai-service (AI服务): http://localhost:3002"
-echo "  - chat-session (会话): http://localhost:3003"
+echo "  - chat-ui (用户前端): http://localhost:8001"
+echo "  - chat-core (API网关): http://localhost:8002"
+echo "  - ai-service (AI服务): http://localhost:8003"
+echo "  - chat-session (会话服务): http://localhost:8004"
+echo "  - chat-admin (管理后台API): http://localhost:8005"
+echo "  - chat-admin (管理后台前端): http://localhost:8006"
 echo ""
 echo "⚠️  按 Ctrl+C 停止所有服务"
 echo ""

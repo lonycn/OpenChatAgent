@@ -12,7 +12,7 @@ pkill -f "vite" 2>/dev/null
 
 # 停止特定端口的进程
 echo "🔌 释放端口..."
-for port in 3001 3002 3003 5173; do
+for port in 8001 8002 8003 8004 8005 8006; do
     pid=$(lsof -ti:$port 2>/dev/null)
     if [ ! -z "$pid" ]; then
         echo "  停止端口 $port 上的进程 (PID: $pid)"

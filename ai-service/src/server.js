@@ -4,7 +4,7 @@ const { DashScopeClient } = require("./client");
 require("dotenv").config();
 
 const app = express();
-const PORT = process.env.PORT || 3002;
+const PORT = process.env.PORT || 8003;
 
 // 中间件
 app.use(cors());
@@ -82,33 +82,35 @@ app.post("/api/chat/stream", async (req, res) => {
       });
     }
 
-    console.log(`🤖 Processing streaming message for session ${sessionId}: ${message}`);
+    console.log(
+      `🤖 Processing streaming message for session ${sessionId}: ${message}`
+    );
 
     // 设置SSE响应头
     res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Cache-Control'
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "Cache-Control",
     });
 
-    let fullResponse = '';
+    let fullResponse = "";
 
     try {
       await aiClient.sendMessageStream(sessionId, message, (chunk) => {
         fullResponse += chunk.content;
-        
+
         // 发送SSE数据
         const data = JSON.stringify({
           content: chunk.content,
           fullContent: chunk.fullContent,
           isComplete: chunk.isComplete,
-          sessionId
+          sessionId,
         });
-        
+
         res.write(`data: ${data}\n\n`);
-        
+
         // 如果完成，关闭连接
         if (chunk.isComplete) {
           res.end();
@@ -119,7 +121,7 @@ app.post("/api/chat/stream", async (req, res) => {
       const errorData = JSON.stringify({
         error: "Streaming error",
         isComplete: true,
-        sessionId
+        sessionId,
       });
       res.write(`data: ${errorData}\n\n`);
       res.end();
