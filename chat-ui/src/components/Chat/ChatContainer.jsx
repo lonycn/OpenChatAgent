@@ -1,470 +1,446 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { ProChat } from '@ant-design/pro-chat';
-import { Button, Tag, Switch, Card } from 'antd';
-import { ReloadOutlined, BugOutlined, ClearOutlined } from '@ant-design/icons';
-import * as websocketService from '../../services/websocketService';
+import React, { useState, useEffect, useRef } from 'react';
+import Chat, { Bubble, useMessages } from '@chatui/core';
+import StatusBar from './StatusBar';
+import { createWebSocketService } from '../../services/robustWebSocketService';
 import { v4 as uuidv4 } from 'uuid';
 import WebSocketMonitor from '../Debug/WebSocketMonitor';
 import ChatErrorBoundary from '../ErrorBoundary/ChatErrorBoundary';
-import SimpleChatInterface from './SimpleChatInterface';
 import requestInterceptor from '../../utils/requestInterceptor';
 
 const API_URL = import.meta.env.VITE_CHAT_CORE_API_URL || 'http://localhost:3001/api';
 
+/**
+ * 聊天容器组件
+ * 整合 ChatUI 组件和 WebSocket 服务
+ */
 const ChatContainer = () => {
-  const [messages, setMessages] = useState([]);
-  const [inputValue, setInputValue] = useState('');
-  const [isConnected, setIsConnected] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const { messages, appendMsg, setTyping } = useMessages([]);
+  const [connectionStatus, setConnectionStatus] = useState('DISCONNECTED');
+  const [reconnectInfo, setReconnectInfo] = useState(null);
+  const [connectionHealth, setConnectionHealth] = useState('disconnected');
+  const [handoverStatus, setHandoverStatus] = useState('AI'); // AI or HUMAN
   const [sessionId, setSessionId] = useState(null);
-  const [currentAgent, setCurrentAgent] = useState('ai');
-  const [isSwitchingAgent, setIsSwitchingAgent] = useState(false);
   const [clientGeneratedUserId, setClientGeneratedUserId] = useState(null);
-  const [showDebugMonitor, setShowDebugMonitor] = useState(true);
-  const [useSimpleInterface, setUseSimpleInterface] = useState(true); // 默认使用简单界面，更稳定
+  const [showDebugMonitor, setShowDebugMonitor] = useState(false);
   const [interceptorStats, setInterceptorStats] = useState({});
+  const wsServiceRef = useRef(null);
+  const sessionInitialized = useRef(false);
 
   // 🚨 监听拦截器事件
   useEffect(() => {
     const handleHttpRequestBlocked = (event) => {
-      console.log('🚫 HTTP请求被拦截:', event.detail);
-      setInterceptorStats(requestInterceptor.getStats());
+      console.log('🚫 HTTP request blocked:', event.detail);
+      setInterceptorStats(prev => ({
+        ...prev,
+        blockedRequests: (prev.blockedRequests || 0) + 1,
+        lastBlockedUrl: event.detail.url
+      }));
+    };
+
+    const handleHttpRequestAllowed = (event) => {
+      console.log('✅ HTTP request allowed:', event.detail);
+      setInterceptorStats(prev => ({
+        ...prev,
+        allowedRequests: (prev.allowedRequests || 0) + 1,
+        lastAllowedUrl: event.detail.url
+      }));
     };
 
     window.addEventListener('httpRequestBlocked', handleHttpRequestBlocked);
-
-    // 定期更新拦截器统计
-    const statsInterval = setInterval(() => {
-      setInterceptorStats(requestInterceptor.getStats());
-    }, 2000);
+    window.addEventListener('httpRequestAllowed', handleHttpRequestAllowed);
 
     return () => {
       window.removeEventListener('httpRequestBlocked', handleHttpRequestBlocked);
-      clearInterval(statsInterval);
+      window.removeEventListener('httpRequestAllowed', handleHttpRequestAllowed);
     };
   }, []);
 
-  // WebSocket配置对象 - 使用useMemo确保只创建一次
-  const websocketConfig = useMemo(() => ({
-    onOpen: () => {
-      console.log('ChatContainer: WebSocket connected');
-      setIsConnected(true);
-      setIsConnecting(false);
-    },
-    onMessage: (receivedMessage) => {
-      console.log('ChatContainer: WebSocket message received:', receivedMessage);
-      setIsLoading(false);
-
-      if (receivedMessage.type === 'system' && receivedMessage.status === 'initialized') {
-        setSessionId(receivedMessage.sessionId);
-        if(receivedMessage.userId !== clientGeneratedUserId) {
-          console.warn("User ID mismatch. Client:", clientGeneratedUserId, "Server used/confirmed:", receivedMessage.userId);
-        }
-        setCurrentAgent(receivedMessage.currentAgent || 'ai');
-        setMessages((prevMessages) => [
-          ...prevMessages,
-          {
-            id: receivedMessage.id || uuidv4(),
-            role: 'system',
-            content: receivedMessage.message || `Session initialized. Session ID: ${receivedMessage.sessionId}`,
-            createTime: receivedMessage.timestamp ? new Date(receivedMessage.timestamp).getTime() : Date.now(),
-          },
-        ]);
-      } else if (receivedMessage.type === 'system_ack' ||
-                 (receivedMessage.from === 'system' &&
-                  receivedMessage.type !== 'error' &&
-                  !(receivedMessage.type === 'system' && receivedMessage.status === 'initialized'))) {
-         setMessages((prevMessages) => [
-          ...prevMessages,
-          {
-            id: receivedMessage.id || uuidv4(),
-            role: 'system',
-            content: receivedMessage.text || receivedMessage.message,
-            createTime: receivedMessage.timestamp ? new Date(receivedMessage.timestamp).getTime() : Date.now(),
-          },
-        ]);
-         if (receivedMessage.newAgent) {
-          setCurrentAgent(receivedMessage.newAgent);
-        }
-      } else if (receivedMessage.type === 'error') {
-         setMessages((prevMessages) => [
-          ...prevMessages,
-          {
-            id: receivedMessage.id || uuidv4(),
-            role: 'system',
-            content: `Server Error: ${receivedMessage.message || receivedMessage.text || 'Unknown error from server.'}`,
-            createTime: receivedMessage.timestamp ? new Date(receivedMessage.timestamp).getTime() : Date.now(),
-          },
-        ]);
-      } else {
-        setMessages((prevMessages) => [
-          ...prevMessages,
-          {
-            id: receivedMessage.id || uuidv4(),
-            role: receivedMessage.from === 'ai' || receivedMessage.from === 'assistant' ? 'assistant' : 'system',
-            content: receivedMessage.text || receivedMessage.content,
-            createTime: receivedMessage.timestamp ? new Date(receivedMessage.timestamp).getTime() : Date.now(),
-          },
-        ]);
-      }
-    },
-    onClose: (event) => {
-      console.log('ChatContainer: WebSocket disconnected', event);
-      setIsConnected(false);
-      setIsConnecting(false);
-    },
-    onError: (errorEvent) => {
-      console.error('ChatContainer: WebSocket error event:', errorEvent);
-      setIsConnected(false);
-      setIsConnecting(false);
-      setIsLoading(false);
-      setMessages((prevMessages) => [
-        ...prevMessages,
-        {
-          id: uuidv4(),
-          role: 'system',
-          content: 'Connection error. Please check your connection or try refreshing.',
-          createTime: Date.now(),
-        },
-      ]);
-    }
-  }), []); // 空依赖数组，只创建一次
-
-  // 初始化用户ID
   useEffect(() => {
-    if (!clientGeneratedUserId) {
-      const userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      setClientGeneratedUserId(userId);
-      console.log('ChatContainer: Generated client user ID:', userId);
-    }
-  }, [clientGeneratedUserId]);
+    // Generate client-side user ID
+    const userId = uuidv4();
+    setClientGeneratedUserId(userId);
+    console.log('Generated client user ID:', userId);
 
-  // WebSocket连接管理 - 增加防抖和重连限制
-  useEffect(() => {
-    let connectionTimeout;
-    let reconnectCount = 0;
-    const maxReconnects = 3;
-    const reconnectDelay = 3000; // 3秒延迟
+    // Initialize WebSocket service
+    wsServiceRef.current = createWebSocketService({
+      debug: true,
+      maxReconnectAttempts: 10,
+      heartbeatInterval: 30000, // 30s
+      pongTimeout: 10000, // 10s
+      enableMessageQueue: true
+    });
 
-    const attemptConnection = () => {
-      if (reconnectCount >= maxReconnects) {
-        console.warn(`ChatContainer: 已达到最大重连次数 (${maxReconnects})，停止重连`);
-        return;
-      }
+    const wsService = wsServiceRef.current;
 
-      if (clientGeneratedUserId && !isConnected && !isConnecting) {
-        console.log(`ChatContainer: 尝试连接WebSocket... (第${reconnectCount + 1}次)`);
-        setIsConnecting(true);
-        reconnectCount++;
-        
-        try {
-          websocketService.connect(websocketConfig);
-        } catch (error) {
-          console.error('ChatContainer: WebSocket连接失败:', error);
-          setIsConnecting(false);
-          
-          // 延迟重连
-          if (reconnectCount < maxReconnects) {
-            connectionTimeout = setTimeout(attemptConnection, reconnectDelay);
-          }
-        }
-      }
-    };
+    // Setup event handlers
+    wsService.on('onOpen', handleWebSocketOpen);
+    wsService.on('onMessage', handleWebSocketMessage);
+    wsService.on('onClose', handleWebSocketClose);
+    wsService.on('onError', handleWebSocketError);
+    wsService.on('onReconnecting', handleReconnecting);
+    wsService.on('onReconnected', handleReconnected);
+    wsService.on('onMaxReconnectAttemptsReached', handleMaxReconnectAttemptsReached);
 
-    // 防抖连接 - 延迟500ms后再尝试连接
-    connectionTimeout = setTimeout(attemptConnection, 500);
+    // Connect
+    wsService.connect();
 
-    // 清理函数
+    // Cleanup on unmount
     return () => {
-      if (connectionTimeout) {
-        clearTimeout(connectionTimeout);
+      if (wsServiceRef.current) {
+        wsServiceRef.current.disconnect();
       }
-      console.log('ChatContainer: Component unmounting, disconnecting WebSocket...');
-        websocketService.disconnect();
     };
-  }, [clientGeneratedUserId, isConnected, isConnecting, websocketConfig]);
+  }, []);
 
-  const handleSendMessage = async (message) => {
-    if (!message?.trim()) {
-      console.warn('ChatContainer: Empty message, ignoring');
-      return;
+  // WebSocket Event Handlers
+  const handleWebSocketOpen = () => {
+    console.log('🔌 WebSocket connected');
+    setConnectionStatus('CONNECTED');
+    setConnectionHealth('connected');
+    setReconnectInfo(null);
+
+    // Initialize session if not already done
+    if (!sessionInitialized.current) {
+      initializeSession();
+      sessionInitialized.current = true;
     }
+  };
 
-    console.log('ChatContainer: Sending message via WebSocket:', message);
-    setIsLoading(true);
-
+  const handleWebSocketMessage = (data) => {
+    console.log('📨 Received message:', data);
+    
     try {
-      if (!sessionId) {
-        // 第一条消息，需要初始化会话
-        console.log('ChatContainer: Initializing session with first message');
-        const initMessage = {
-      id: uuidv4(),
+      const message = typeof data === 'string' ? JSON.parse(data) : data;
+      
+      switch (message.type) {
+        case 'message':
+        case 'response':
+        case 'text':
+          appendMsg({
+            type: 'text',
+            content: { text: message.content || message.text || message.message },
+            position: 'left',
+            user: {
+              avatar: message.sender === 'AI' || message.role === 'assistant' ? '🤖' : '👨‍💼',
+              name: message.sender === 'AI' || message.role === 'assistant' ? 'AI助手' : '人工客服'
+            }
+          });
+          break;
+          
+        case 'handover':
+          setHandoverStatus(message.to);
+          appendMsg({
+            type: 'text',
+            content: { 
+              text: message.to === 'HUMAN' 
+                ? '已为您转接人工客服，请稍候...'
+                : 'AI助手已接管对话'
+            },
+            position: 'center'
+          });
+          break;
+          
+        case 'system':
+          if (message.status === 'initialized') {
+            sessionInitialized.current = true;
+            setSessionId(message.sessionId);
+            console.log('✅ Session initialized successfully');
+          }
+          
+          appendMsg({
+            type: 'text',
+            content: { text: message.content || message.message },
+            position: 'center'
+          });
+          break;
+          
+        case 'stream':
+          // Handle streaming messages
+          handleStreamMessage(message);
+          break;
+          
+        default:
+          console.warn('Unknown message type:', message.type);
+      }
+    } catch (error) {
+      console.error('Error parsing message:', error);
+    }
+  };
+
+  const handleStreamMessage = (message) => {
+    // For streaming messages, we need to update existing message or create new one
+    const messageId = message.id || 'stream-' + Date.now();
+    
+    // This is a simplified implementation - ChatUI doesn't have built-in streaming support
+    // We'll treat each stream chunk as a complete message for now
+    appendMsg({
+      type: 'text',
+      content: { text: message.fullText || message.text },
+      position: 'left',
+      user: {
+        avatar: '🤖',
+        name: 'AI助手'
+      }
+    });
+  };
+
+  const handleWebSocketClose = (event) => {
+    console.log('🔌 WebSocket disconnected:', event);
+    setConnectionStatus('DISCONNECTED');
+    setConnectionHealth('disconnected');
+  };
+
+  const handleWebSocketError = (error) => {
+    console.error('🔌 WebSocket error:', error);
+    setConnectionStatus('ERROR');
+    setConnectionHealth('error');
+  };
+
+  const handleReconnecting = (attempt, maxAttempts) => {
+    console.log(`🔄 Reconnecting... (${attempt}/${maxAttempts})`);
+    setConnectionStatus('RECONNECTING');
+    setConnectionHealth('reconnecting');
+    setReconnectInfo({ attempt, maxAttempts });
+  };
+
+  const handleReconnected = () => {
+    console.log('🔌 Reconnected successfully');
+    setConnectionStatus('CONNECTED');
+    setConnectionHealth('connected');
+    setReconnectInfo(null);
+  };
+
+  const handleMaxReconnectAttemptsReached = () => {
+    console.log('❌ Max reconnect attempts reached');
+    setConnectionStatus('FAILED');
+    setConnectionHealth('failed');
+  };
+
+  // Initialize session
+  const initializeSession = () => {
+    if (wsServiceRef.current && wsServiceRef.current.isConnected()) {
+      const initMessage = {
         type: 'init',
         payload: {
-            userId: clientGeneratedUserId,
-          initialMessage: {
-              text: message.trim(),
-              type: 'text'
-          }
-        },
-          timestamp: new Date().toISOString()
-        };
-
-        await websocketService.sendMessage(initMessage);
-    } else {
-        // 后续消息
-        const textMessage = {
-          id: uuidv4(),
-        type: 'text',
-          text: message.trim(),
-        sessionId: sessionId,
-          userId: clientGeneratedUserId,
-          timestamp: new Date().toISOString()
-        };
-
-        await websocketService.sendMessage(textMessage);
-      }
-
-      // 添加用户消息到UI
-      const userMessage = {
-        id: uuidv4(),
-        role: 'user',
-        content: message.trim(),
-        createTime: Date.now(),
-      };
-
-      setMessages((prevMessages) => [...prevMessages, userMessage]);
-      setInputValue(''); // 清空输入框
-
-    } catch (error) {
-      console.error('ChatContainer: Error sending message:', error);
-      setIsLoading(false);
-
-      const errorMessage = {
-        id: uuidv4(),
-        role: 'system',
-        content: `Failed to send message: ${error.message}`,
-        createTime: Date.now(),
-      };
-
-      setMessages((prevMessages) => [...prevMessages, errorMessage]);
-    }
-  };
-
-  const handleSwitchAgent = async () => {
-    if (!sessionId) {
-      console.warn('ChatContainer: Cannot switch agent - no active session');
-      return;
-    }
-
-    console.log('ChatContainer: Switching agent from', currentAgent);
-    setIsSwitchingAgent(true);
-
-    try {
-      const response = await fetch(`${API_URL}/sessions/${sessionId}/switch-agent`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          currentAgent: currentAgent,
+          userAgent: navigator.userAgent,
+          timestamp: new Date().toISOString(),
           userId: clientGeneratedUserId
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      console.log('ChatContainer: Agent switch response:', result);
-
-      if (result.success) {
-        setCurrentAgent(result.newAgent);
-        
-        const systemMessage = {
-          id: uuidv4(),
-          role: 'system',
-          content: result.message || `Switched to ${result.newAgent} agent`,
-          createTime: Date.now(),
-        };
-
-        setMessages((prevMessages) => [...prevMessages, systemMessage]);
-      } else {
-        throw new Error(result.error || 'Failed to switch agent');
-      }
-
-    } catch (error) {
-      console.error('ChatContainer: Error switching agent:', error);
-      
-      const errorMessage = {
-        id: uuidv4(),
-        role: 'system',
-        content: `Failed to switch agent: ${error.message}`,
-        createTime: Date.now(),
+        }
       };
-
-      setMessages((prevMessages) => [...prevMessages, errorMessage]);
-    } finally {
-      setIsSwitchingAgent(false);
+      
+      wsServiceRef.current.send(initMessage);
+      console.log('🚀 Session initialization sent');
+      
+      // Add welcome message
+      appendMsg({
+        type: 'text',
+        content: { text: '您好！我是AI助手，有什么可以帮助您的吗？' },
+        position: 'left',
+        user: {
+          avatar: '🤖',
+          name: 'AI助手'
+        }
+      });
     }
   };
 
-  const handleClearStats = () => {
-    requestInterceptor.clearStats();
-    setInterceptorStats(requestInterceptor.getStats());
-    console.log('✅ 拦截器统计已清理');
+  // Handle message send
+  const handleSend = (type, val) => {
+    if (type === 'text' && val.trim()) {
+      // Add user message
+      const userMessage = {
+        type: 'text',
+        content: { text: val },
+        position: 'right'
+      };
+      appendMsg(userMessage);
+
+      // Send to server
+      if (wsServiceRef.current && wsServiceRef.current.isConnected()) {
+        const messageToSend = {
+          type: 'text',
+          text: val,
+          id: uuidv4(),
+          timestamp: new Date().toISOString(),
+          userId: clientGeneratedUserId
+        };
+        
+        const sent = wsServiceRef.current.send(messageToSend);
+        
+        if (sent) {
+          // Show typing indicator
+          setTyping(true);
+          setTimeout(() => setTyping(false), 3000);
+        } else {
+          // Queue message if disconnected
+          appendMsg({
+            type: 'text',
+            content: { text: '连接已断开，消息将在重连后发送' },
+            position: 'center'
+          });
+        }
+      } else {
+        // Queue message if disconnected
+        appendMsg({
+          type: 'text',
+          content: { text: '连接已断开，消息将在重连后发送' },
+          position: 'center'
+        });
+      }
+    }
   };
 
-  const handleRefresh = () => {
-    window.location.reload();
+  // Handle handover request
+  const handleHandoverRequest = () => {
+    const newStatus = handoverStatus === 'AI' ? 'HUMAN' : 'AI';
+    
+    if (wsServiceRef.current && wsServiceRef.current.isConnected()) {
+      wsServiceRef.current.send({
+        type: 'handover_request',
+        to: newStatus,
+        timestamp: Date.now(),
+        userId: clientGeneratedUserId
+      });
+    }
+  };
+
+  // Handle retry connection
+  const handleRetryConnection = () => {
+    if (wsServiceRef.current) {
+      wsServiceRef.current.reset();
+    }
+  };
+
+  // Clear messages
+  const handleClearMessages = () => {
+    // ChatUI useMessages doesn't have a clear method, so we'll need to work around this
+    window.location.reload(); // Simple solution for now
+  };
+
+  // Toggle debug monitor
+  const toggleDebugMonitor = () => {
+    setShowDebugMonitor(!showDebugMonitor);
+  };
+
+  // Render message content
+  const renderMessageContent = (msg) => {
+    const { content } = msg;
+    return <Bubble content={content.text} />;
   };
 
   return (
-    <div style={{ height: '100vh', display: 'flex', background: '#f5f5f5' }}>
-      {/* 左侧：聊天界面 */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'white' }}>
-        {/* 顶部控制栏 */}
-        <div style={{ 
-          padding: '12px 16px', 
-          borderBottom: '1px solid #f0f0f0',
+    <ChatErrorBoundary>
+      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+        {/* Status Bar */}
+        <StatusBar
+          connectionHealth={connectionHealth}
+          reconnectInfo={reconnectInfo}
+          handoverStatus={handoverStatus}
+          onHandoverRequest={handleHandoverRequest}
+        />
+
+        {/* Debug Controls */}
+        <div style={{
+          padding: '8px 16px',
+          background: '#fafafa',
+          borderBottom: '1px solid #e8e8e8',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          background: 'white'
+          fontSize: '12px'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <Tag color={isConnected ? 'green' : 'red'}>
-              {isConnected ? '已连接' : '未连接'}
-            </Tag>
-            
-            <Tag color={currentAgent === 'ai' ? 'blue' : 'orange'}>
-              {currentAgent === 'ai' ? 'AI客服' : '人工客服'}
-            </Tag>
-
-            {sessionId && (
-              <Tag color="purple">
-                会话: {sessionId.substring(0, 8)}...
-              </Tag>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <span>Session: {sessionId || 'Not initialized'}</span>
+            <span>User: {clientGeneratedUserId?.slice(0, 8)}...</span>
+            {interceptorStats.blockedRequests > 0 && (
+              <span style={{ color: '#ff4d4f' }}>
+                🚫 Blocked: {interceptorStats.blockedRequests}
+              </span>
             )}
-
-            {interceptorStats.totalBlocked > 0 && (
-              <Tag color="red">
-                🚫 已拦截: {interceptorStats.totalBlocked}
-              </Tag>
-            )}
-      </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Switch
-              checked={useSimpleInterface}
-              onChange={setUseSimpleInterface}
-              checkedChildren="简单界面"
-              unCheckedChildren="ProChat"
-              size="small"
-            />
-            
-            <Switch
-              checked={showDebugMonitor}
-              onChange={setShowDebugMonitor}
-              checkedChildren="调试"
-              unCheckedChildren="调试"
-              size="small"
-            />
-
-            <Button
-              type="primary"
-              size="small"
-              onClick={handleSwitchAgent}
-              loading={isSwitchingAgent}
-              disabled={!sessionId}
-            >
-              {currentAgent === 'ai' ? '转人工' : 'AI接管'}
-          </Button>
-
-            <Button
-              size="small"
-              icon={<ClearOutlined />}
-              onClick={handleClearStats}
-              title="清理拦截器统计"
-            >
-              清理
-          </Button>
-
-            <Button
-              size="small"
-              icon={<ReloadOutlined />}
-              onClick={handleRefresh}
-              title="刷新页面"
-            >
-              刷新
-        </Button>
           </div>
-      </div>
-
-        {/* 聊天区域 */}
-        <div style={{ flex: 1, overflow: 'hidden', height: '100%' }}>
-          <ChatErrorBoundary>
-            {useSimpleInterface ? (
-              <SimpleChatInterface
-                messages={messages}
-                onSend={handleSendMessage}
-                input={inputValue}
-                onInputChange={setInputValue}
-                loading={isLoading || isSwitchingAgent}
-                helloMessage="欢迎使用AI智能客服系统！请输入您的问题。"
-                placeholder="请输入您的问题..."
-              />
-            ) : (
-        <ProChat
-          messages={messages}
-          onSend={handleSendMessage}
-          input={inputValue}
-          onInputChange={setInputValue}
-                loading={isLoading || isSwitchingAgent}
-                // 🚨 完全禁用HTTP请求 - 使用最简配置
-                request={false}
-                // 基础配置
-                helloMessage="欢迎使用AI智能客服系统！请输入您的问题。"
-                placeholder="请输入您的问题..."
-                // 样式配置
-                style={{ height: '100%' }}
-                // 🔧 修复ProChat配置错误 - 使用最简配置
-                config={{
-                  enableHistoryCount: false,
-                  historyCount: 0,
-                  enablePlugins: false,
-                  enableAutoScroll: true,
-                  showTitle: false,
-                  showClearButton: false,
-                  showModelSwitcher: false,
-                  enableStreamRender: false
+          
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={toggleDebugMonitor}
+              style={{
+                padding: '2px 8px',
+                fontSize: '11px',
+                border: '1px solid #d9d9d9',
+                borderRadius: '3px',
+                background: showDebugMonitor ? '#1890ff' : 'white',
+                color: showDebugMonitor ? 'white' : '#666',
+                cursor: 'pointer'
+              }}
+            >
+              Debug
+            </button>
+            
+            <button
+              onClick={handleClearMessages}
+              style={{
+                padding: '2px 8px',
+                fontSize: '11px',
+                border: '1px solid #d9d9d9',
+                borderRadius: '3px',
+                background: 'white',
+                color: '#666',
+                cursor: 'pointer'
+              }}
+            >
+              Clear
+            </button>
+            
+            {(connectionHealth === 'error' || connectionHealth === 'failed') && (
+              <button
+                onClick={handleRetryConnection}
+                style={{
+                  padding: '2px 8px',
+                  fontSize: '11px',
+                  border: '1px solid #1890ff',
+                  borderRadius: '3px',
+                  background: 'white',
+                  color: '#1890ff',
+                  cursor: 'pointer'
                 }}
-                // 禁用可能触发HTTP请求的功能
-                enablePlugins={false}
-                enableStreamRender={false}
-                modelProvider={null}
-                // 🚨 移除有问题的chatItemRenderConfig配置
-              />
+              >
+                Retry
+              </button>
             )}
-          </ChatErrorBoundary>
+          </div>
+        </div>
+
+        {/* Chat Container */}
+        <div style={{ flex: 1, position: 'relative' }}>
+          <Chat
+            navbar={{ title: 'OpenChatAgent' }}
+            messages={messages}
+            renderMessageContent={renderMessageContent}
+            onSend={handleSend}
+            placeholder="请输入消息..."
+          />
+          
+          {/* Debug Monitor Overlay */}
+          {showDebugMonitor && (
+            <div style={{
+              position: 'absolute',
+              top: '10px',
+              right: '10px',
+              width: '300px',
+              maxHeight: '400px',
+              background: 'rgba(255, 255, 255, 0.95)',
+              border: '1px solid #d9d9d9',
+              borderRadius: '6px',
+              padding: '12px',
+              fontSize: '11px',
+              overflow: 'auto',
+              zIndex: 1000
+            }}>
+              <WebSocketMonitor wsService={wsServiceRef.current} />
+            </div>
+          )}
         </div>
       </div>
-      
-      {/* 右侧：调试监控面板 */}
-      {showDebugMonitor && (
-        <div style={{ width: '400px', display: 'flex', flexDirection: 'column' }}>
-          <WebSocketMonitor 
-            websocketService={websocketService}
-            isConnected={isConnected}
-            sessionId={sessionId}
-            interceptorStats={interceptorStats}
-            requestInterceptor={requestInterceptor}
-          />
-        </div>
-      )}
-    </div>
+    </ChatErrorBoundary>
   );
 };
 

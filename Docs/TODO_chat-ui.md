@@ -1,6 +1,6 @@
 # 📦 chat-ui 模块开发 TODO
 
-> **模块职责**：基于 Ant Design X 的前端聊天界面，提供用户对话体验和客服状态控制
+> **模块职责**：基于 ChatUI 的前端聊天界面，提供用户对话体验和客服状态控制
 
 ## 🎯 MVP 核心任务（第 2 周）
 
@@ -10,12 +10,12 @@
 
   - [ ] 创建 `chat-ui/` 目录结构
   - [ ] 初始化 React 项目 (Vite + React 18)
-  - [ ] 安装依赖 `@ant-design/x`, `antd`, `axios`, `ws`
+  - [ ] 安装依赖 `@chatui/core`, `axios`, `ws`
   - [ ] 配置 Vite 开发环境和代理
 
 - [ ] **核心聊天组件**
 
-  - [ ] 集成 Ant Design X 聊天组件
+  - [ ] 集成 ChatUI 聊天组件
   - [ ] 实现消息气泡展示 (用户/AI/系统消息)
   - [ ] 实现消息输入框和发送功能
   - [ ] 添加消息时间戳显示
@@ -120,7 +120,7 @@ chat-ui/
 ## 🔧 技术要求
 
 - **框架**: React 18 + Vite
-- **UI 库**: Ant Design X + Antd
+- **UI 库**: ChatUI (@chatui/core)
 - **状态管理**: React Hooks (useState, useEffect, useContext)
 - **HTTP 客户端**: axios
 - **WebSocket**: 原生 WebSocket API
