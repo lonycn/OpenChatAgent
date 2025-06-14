@@ -17,6 +17,18 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
+    // 开发环境绕过认证
+    if (process.env.NODE_ENV === "development" && token === "test-token") {
+      req.user = {
+        id: 1,
+        username: "test-admin",
+        role: "admin",
+        status: "active",
+        hasPermission: () => true,
+      };
+      return next();
+    }
+
     // 验证JWT令牌
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 

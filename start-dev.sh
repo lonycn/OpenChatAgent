@@ -13,7 +13,7 @@ pkill -f "vite" 2>/dev/null
 pkill -f "max dev" 2>/dev/null
 
 # 释放可能占用的端口
-for port in 8001 8002 8003 8004 8005 8006; do
+for port in 8001 8002 8003 8004 8005 8006 8007; do
     pid=$(lsof -ti:$port 2>/dev/null)
     if [ ! -z "$pid" ]; then
         echo "  🔌 释放端口 $port (PID: $pid)"
@@ -97,7 +97,7 @@ echo "  - chat-core (API网关): http://localhost:8002"
 echo "  - ai-service (AI服务): http://localhost:8003"
 echo "  - chat-session (会话服务): http://localhost:8004"
 echo "  - chat-admin (管理后台API): http://localhost:8005"
-echo "  - chat-admin (管理后台前端): http://localhost:8006"
+echo "  - chat-admin-ui (管理后台前端): http://localhost:8006"
 echo ""
 echo "⚠️  按 Ctrl+C 停止所有服务"
 echo ""

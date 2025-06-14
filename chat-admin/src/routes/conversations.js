@@ -1,4 +1,4 @@
-const express = require("express");
+const express = require('express');
 const { body, param, query } = require("express-validator");
 const router = express.Router();
 
@@ -24,6 +24,13 @@ const switchAgentValidation = [
   body("agent_type")
     .isIn(["ai", "human"])
     .withMessage("代理类型必须是 ai 或 human"),
+];
+
+const addNoteValidation = [
+  body("content")
+    .trim()
+    .isLength({ min: 1, max: 1000 })
+    .withMessage("备注内容长度必须在1-1000字符之间"),
 ];
 
 const sendMessageValidation = [
@@ -65,8 +72,15 @@ router.get(
   ConversationController.getConversation
 );
 
+// 接管会话
+router.post(
+  "/:conversationId/takeover",
+  conversationIdValidation,
+  ConversationController.takeoverConversation
+);
+
 // 分配会话
-router.put(
+router.post(
   "/:conversationId/assign",
   conversationIdValidation,
   assignConversationValidation,
@@ -81,9 +95,23 @@ router.put(
   ConversationController.updateConversationStatus
 );
 
-// 切换代理类型
-router.put(
-  "/:conversationId/agent",
+// 标记已解决
+router.post(
+  "/:conversationId/resolve",
+  conversationIdValidation,
+  ConversationController.resolveConversation
+);
+
+// 关闭会话
+router.post(
+  "/:conversationId/close",
+  conversationIdValidation,
+  ConversationController.closeConversation
+);
+
+// AI/人工切换
+router.post(
+  "/:conversationId/switch-agent",
   conversationIdValidation,
   switchAgentValidation,
   ConversationController.switchAgent
@@ -103,6 +131,14 @@ router.post(
   conversationIdValidation,
   sendMessageValidation,
   ConversationController.sendMessage
+);
+
+// 添加私有备注
+router.post(
+  "/:conversationId/notes",
+  conversationIdValidation,
+  addNoteValidation,
+  ConversationController.addNote
 );
 
 module.exports = router;

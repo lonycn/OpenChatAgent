@@ -20,6 +20,13 @@ const {
 router.post("/login", loginValidation, authController.login);
 
 /**
+ * @route   POST /api/login/account (兼容前端)
+ * @desc    用户登录 - 兼容Ant Design Pro默认路径
+ * @access  Public
+ */
+router.post("/account", loginValidation, authController.login);
+
+/**
  * @route   POST /api/v1/auth/refresh
  * @desc    刷新访问令牌
  * @access  Public

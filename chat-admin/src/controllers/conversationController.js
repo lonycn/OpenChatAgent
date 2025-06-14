@@ -1,5 +1,5 @@
-const ConversationService = require("../services/conversations");
 const { validationResult } = require("express-validator");
+const ConversationService = require("../services/conversations");
 
 class ConversationController {
   // 获取会话列表
@@ -84,6 +84,30 @@ class ConversationController {
         error: {
           code: "INTERNAL_ERROR",
           message: "获取会话详情失败",
+        },
+      });
+    }
+  }
+
+  // 接管会话
+  static async takeoverConversation(req, res) {
+    try {
+      const { conversationId } = req.params;
+      const userId = req.user.id;
+
+      const conversation = await ConversationService.takeover(conversationId, userId);
+
+      res.json({
+        success: true,
+        data: conversation,
+      });
+    } catch (error) {
+      console.error("Takeover conversation error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: "接管会话失败",
         },
       });
     }
@@ -235,6 +259,128 @@ class ConversationController {
         error: {
           code: "INTERNAL_ERROR",
           message: "切换代理失败",
+        },
+      });
+    }
+  }
+
+  // 标记会话已解决
+  static async resolveConversation(req, res) {
+    try {
+      const { conversationId } = req.params;
+      const userId = req.user.id;
+
+      const conversation = await ConversationService.updateStatus(conversationId, 'resolved', userId);
+
+      res.json({
+        success: true,
+        data: conversation,
+      });
+    } catch (error) {
+      console.error("Resolve conversation error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: "标记会话已解决失败",
+        },
+      });
+    }
+  }
+
+  // 关闭会话
+  static async closeConversation(req, res) {
+    try {
+      const { conversationId } = req.params;
+      const userId = req.user.id;
+
+      const conversation = await ConversationService.updateStatus(conversationId, 'closed', userId);
+
+      res.json({
+        success: true,
+        data: conversation,
+      });
+    } catch (error) {
+      console.error("Close conversation error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: "关闭会话失败",
+        },
+      });
+    }
+  }
+
+  // AI/人工切换
+  static async switchAgentType(req, res) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "请求参数无效",
+            details: errors.array(),
+          },
+        });
+      }
+
+      const { conversationId } = req.params;
+      const { agent_type } = req.body;
+      const userId = req.user.id;
+
+      const conversation = await ConversationService.switchAgentType(conversationId, agent_type, userId);
+
+      res.json({
+        success: true,
+        data: conversation,
+      });
+    } catch (error) {
+      console.error("Switch agent type error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: "切换代理类型失败",
+        },
+      });
+    }
+  }
+
+  // 添加私有备注
+  static async addNote(req, res) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "请求参数无效",
+            details: errors.array(),
+          },
+        });
+      }
+
+      const { conversationId } = req.params;
+      const { content } = req.body;
+      const userId = req.user.id;
+
+      const note = await ConversationService.addNote(conversationId, content, userId);
+
+      res.json({
+        success: true,
+        data: note,
+      });
+    } catch (error) {
+      console.error("Add note error:", error);
+      res.status(500).json({
+        success: false,
+        error: {
+          code: "INTERNAL_ERROR",
+          message: "添加备注失败",
         },
       });
     }

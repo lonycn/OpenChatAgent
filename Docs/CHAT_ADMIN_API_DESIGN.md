@@ -69,14 +69,27 @@ Response:
     "user": {
       "id": 123,
       "email": "agent@example.com",
-      "full_name": "张三",
+      "name": "张三",
+      "username": "agent001",
       "role": "agent",
-      "avatar_url": "https://...",
-      "permissions": ["conversations:read", "conversations:write"]
+      "status": "active",
+      "avatar_url": "https://..."
     },
     "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
     "refresh_token": "refresh_token_string"
   }
+}
+```
+
+#### 兼容登录接口
+
+```http
+POST /api/login/account
+Content-Type: application/json
+
+{
+  "email": "agent@example.com",
+  "password": "password123"
 }
 ```
 
@@ -89,6 +102,16 @@ Content-Type: application/json
 {
   "refresh_token": "refresh_token_string"
 }
+
+Response:
+{
+  "success": true,
+  "data": {
+    "user": {...},
+    "token": "new_access_token",
+    "refresh_token": "new_refresh_token"
+  }
+}
 ```
 
 #### 登出
@@ -96,6 +119,82 @@ Content-Type: application/json
 ```http
 POST /api/v1/auth/logout
 Authorization: Bearer {token}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "message": "登出成功"
+  }
+}
+```
+
+#### 获取当前用户信息
+
+```http
+GET /api/v1/auth/me
+Authorization: Bearer {token}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": 123,
+      "email": "agent@example.com",
+      "name": "张三",
+      "username": "agent001",
+      "role": "agent",
+      "status": "active",
+      "avatar_url": "https://...",
+      "created_at": "2024-01-01T00:00:00Z",
+      "updated_at": "2024-01-15T10:00:00Z"
+    }
+  }
+}
+```
+
+#### 更新用户资料
+
+```http
+PUT /api/v1/auth/profile
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "name": "新姓名",
+  "avatar_url": "https://new-avatar.com/image.jpg"
+}
+```
+
+#### 修改密码
+
+```http
+PUT /api/v1/auth/password
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "current_password": "old_password",
+  "new_password": "new_password"
+}
+```
+
+#### 注册新用户（管理员功能）
+
+```http
+POST /api/v1/auth/register
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "username": "new_agent",
+  "name": "新客服",
+  "email": "new@example.com",
+  "password": "password123",
+  "role": "agent",
+  "status": "active"
+}
 ```
 
 ### 2. 会话管理 `/api/v1/conversations`
@@ -103,7 +202,7 @@ Authorization: Bearer {token}
 #### 获取会话列表
 
 ```http
-GET /api/v1/conversations?status=open&page=1&per_page=20&assignee_id=123
+GET /api/v1/conversations?status=open,pending&page=1&per_page=20&assignee_id=123&inbox_id=1&priority=high,medium&channel_type=web_widget&current_agent_type=ai&search=关键词
 Authorization: Bearer {token}
 
 Response:
@@ -118,6 +217,7 @@ Response:
           "id": 789,
           "name": "客户张三",
           "email": "customer@example.com",
+          "phone": "+86 138****8888",
           "avatar_url": "https://..."
         },
         "status": "open",
@@ -126,11 +226,17 @@ Response:
         "current_agent_type": "ai",
         "assignee": {
           "id": 123,
-          "full_name": "客服李四"
+          "name": "客服李四",
+          "avatar_url": "https://..."
+        },
+        "inbox": {
+          "id": 1,
+          "name": "网站客服"
         },
         "unread_count": 3,
         "last_message": {
           "content": "需要帮助",
+          "sender_type": "contact",
           "created_at": "2024-01-15T10:30:00Z"
         },
         "created_at": "2024-01-15T10:00:00Z",
@@ -143,6 +249,29 @@ Response:
       "total_count": 156,
       "total_pages": 8
     }
+  }
+}
+```
+
+#### 获取会话统计
+
+```http
+GET /api/v1/conversations/stats
+Authorization: Bearer {token}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "total_conversations": 1250,
+    "open_conversations": 45,
+    "pending_conversations": 12,
+    "resolved_conversations": 1180,
+    "closed_conversations": 13,
+    "my_conversations": 8,
+    "unassigned_conversations": 5,
+    "avg_response_time": 120,
+    "avg_resolution_time": 1800
   }
 }
 ```
@@ -211,16 +340,38 @@ Response:
 }
 ```
 
+#### 接管会话
+
+```http
+POST /api/v1/conversations/{conversation_id}/takeover
+Authorization: Bearer {token}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "conversation": {
+      "id": 456,
+      "assignee": {
+        "id": 123,
+        "name": "客服李四"
+      },
+      "current_agent_type": "human",
+      "updated_at": "2024-01-15T10:35:00Z"
+    }
+  }
+}
+```
+
 #### 分配会话
 
 ```http
-PUT /api/v1/conversations/{conversation_id}/assign
+POST /api/v1/conversations/{conversation_id}/assign
 Authorization: Bearer {token}
 Content-Type: application/json
 
 {
-  "assignee_id": 123,
-  "team_id": 5  // 可选
+  "assignee_id": 123
 }
 
 Response:
@@ -231,9 +382,71 @@ Response:
       "id": 456,
       "assignee": {
         "id": 123,
-        "full_name": "客服李四"
+        "name": "客服李四"
       },
       "updated_at": "2024-01-15T10:35:00Z"
+    }
+  }
+}
+```
+
+#### 更新会话状态
+
+```http
+PUT /api/v1/conversations/{conversation_id}/status
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "status": "resolved"  // open, pending, resolved, closed
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "conversation": {
+      "id": 456,
+      "status": "resolved",
+      "updated_at": "2024-01-15T10:35:00Z"
+    }
+  }
+}
+```
+
+#### 标记已解决
+
+```http
+POST /api/v1/conversations/{conversation_id}/resolve
+Authorization: Bearer {token}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "conversation": {
+      "id": 456,
+      "status": "resolved",
+      "resolved_at": "2024-01-15T10:35:00Z"
+    }
+  }
+}
+```
+
+#### 关闭会话
+
+```http
+POST /api/v1/conversations/{conversation_id}/close
+Authorization: Bearer {token}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "conversation": {
+      "id": 456,
+      "status": "closed",
+      "closed_at": "2024-01-15T10:35:00Z"
     }
   }
 }
@@ -242,7 +455,7 @@ Response:
 #### 切换服务类型 (AI ↔ 人工)
 
 ```http
-PUT /api/v1/conversations/{conversation_id}/switch-agent
+POST /api/v1/conversations/{conversation_id}/ai-switch
 Authorization: Bearer {token}
 Content-Type: application/json
 
@@ -263,19 +476,60 @@ Response:
 }
 ```
 
-#### 更新会话状态
+### 3. 消息管理 `/api/v1/conversations/{conversation_id}/messages`
+
+#### 获取会话消息
 
 ```http
-PUT /api/v1/conversations/{conversation_id}/status
+GET /api/v1/conversations/{conversation_id}/messages?page=1&per_page=20
 Authorization: Bearer {token}
-Content-Type: application/json
 
+Response:
 {
-  "status": "resolved"  // open, pending, resolved, closed
+  "success": true,
+  "data": {
+    "messages": [
+      {
+        "id": 1001,
+        "uuid": "msg-uuid",
+        "conversation_id": 456,
+        "sender_type": "contact",
+        "sender": {
+          "id": 789,
+          "name": "客户张三",
+          "email": "customer@example.com"
+        },
+        "content": "我需要技术支持",
+        "message_type": "text",
+        "is_private": false,
+        "created_at": "2024-01-15T10:00:00Z",
+        "updated_at": "2024-01-15T10:00:00Z"
+      },
+      {
+        "id": 1002,
+        "uuid": "msg-uuid-2",
+        "conversation_id": 456,
+        "sender_type": "agent",
+        "sender": {
+          "id": 123,
+          "name": "客服李四"
+        },
+        "content": "您好！请问遇到了什么问题？",
+        "message_type": "text",
+        "is_private": false,
+        "created_at": "2024-01-15T10:01:00Z",
+        "updated_at": "2024-01-15T10:01:00Z"
+      }
+    ],
+    "meta": {
+      "current_page": 1,
+      "per_page": 20,
+      "total_count": 25,
+      "total_pages": 2
+    }
+  }
 }
 ```
-
-### 3. 消息管理 `/api/v1/conversations/{conversation_id}/messages`
 
 #### 发送消息
 
@@ -287,11 +541,7 @@ Content-Type: application/json
 {
   "content": "感谢您的反馈，我们会尽快处理",
   "message_type": "text",
-  "is_private": false,
-  "metadata": {
-    "attachments": [],
-    "mentions": []
-  }
+  "is_private": false
 }
 
 Response:
@@ -301,15 +551,17 @@ Response:
     "message": {
       "id": 1003,
       "uuid": "msg-uuid-3",
+      "conversation_id": 456,
       "sender_type": "agent",
       "sender": {
         "id": 123,
-        "full_name": "客服李四"
+        "name": "客服李四"
       },
       "content": "感谢您的反馈，我们会尽快处理",
       "message_type": "text",
       "is_private": false,
-      "created_at": "2024-01-15T10:40:00Z"
+      "created_at": "2024-01-15T10:40:00Z",
+      "updated_at": "2024-01-15T10:40:00Z"
     }
   }
 }
@@ -318,30 +570,45 @@ Response:
 #### 添加私有备注
 
 ```http
-POST /api/v1/conversations/{conversation_id}/messages
+POST /api/v1/conversations/{conversation_id}/notes
 Authorization: Bearer {token}
 Content-Type: application/json
 
 {
-  "content": "客户情绪比较激动，需要耐心处理",
-  "message_type": "text",
-  "is_private": true
+  "content": "客户情绪比较激动，需要耐心处理"
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "note": {
+      "id": 1004,
+      "conversation_id": 456,
+      "content": "客户情绪比较激动，需要耐心处理",
+      "created_by": {
+        "id": 123,
+        "name": "客服李四"
+      },
+      "created_at": "2024-01-15T10:45:00Z"
+    }
+  }
 }
 ```
 
-### 4. 客户管理 `/api/v1/contacts`
+### 4. 客户管理 `/api/v1/customers`
 
 #### 获取客户列表
 
 ```http
-GET /api/v1/contacts?search=张三&page=1&per_page=20
+GET /api/v1/customers?search=张三&page=1&per_page=20&tags=VIP客户
 Authorization: Bearer {token}
 
 Response:
 {
   "success": true,
   "data": {
-    "contacts": [
+    "customers": [
       {
         "id": 789,
         "identifier": "customer-uuid",
@@ -351,12 +618,14 @@ Response:
         "avatar_url": "https://...",
         "custom_attributes": {
           "vip_level": "gold",
-          "source": "website"
+          "source": "website",
+          "company": "示例公司"
         },
         "tags": ["VIP客户", "技术支持"],
         "last_activity_at": "2024-01-15T10:30:00Z",
         "conversations_count": 5,
-        "created_at": "2024-01-01T00:00:00Z"
+        "created_at": "2024-01-01T00:00:00Z",
+        "updated_at": "2024-01-15T09:00:00Z"
       }
     ],
     "meta": {
@@ -372,32 +641,28 @@ Response:
 #### 获取客户详情
 
 ```http
-GET /api/v1/contacts/{contact_id}
+GET /api/v1/customers/{customer_id}
 Authorization: Bearer {token}
 
 Response:
 {
   "success": true,
   "data": {
-    "contact": {
+    "customer": {
       "id": 789,
       "identifier": "customer-uuid",
       "name": "客户张三",
       "email": "customer@example.com",
       "phone": "+86 138****8888",
+      "avatar_url": "https://...",
       "custom_attributes": {
         "vip_level": "gold",
         "source": "website",
         "company": "示例公司"
       },
-      "conversations": [
-        {
-          "id": 456,
-          "status": "open",
-          "channel_type": "web_widget",
-          "created_at": "2024-01-15T10:00:00Z"
-        }
-      ],
+      "tags": ["VIP客户", "技术支持"],
+      "last_activity_at": "2024-01-15T10:30:00Z",
+      "conversations_count": 5,
       "created_at": "2024-01-01T00:00:00Z",
       "updated_at": "2024-01-15T09:00:00Z"
     }
@@ -405,68 +670,308 @@ Response:
 }
 ```
 
-### 5. 团队管理 `/api/v1/teams`
-
-#### 获取团队列表
+#### 更新客户信息
 
 ```http
-GET /api/v1/teams
+PUT /api/v1/customers/{customer_id}
 Authorization: Bearer {token}
+Content-Type: application/json
 
-Response:
 {
-  "success": true,
-  "data": {
-    "teams": [
-      {
-        "id": 1,
-        "name": "技术支持团队",
-        "description": "负责技术相关问题的解答",
-        "members_count": 8,
-        "online_members_count": 5,
-        "created_at": "2024-01-01T00:00:00Z"
-      }
-    ]
-  }
+  "name": "新客户姓名",
+  "email": "new@example.com",
+  "phone": "+86 139****9999",
+  "avatar_url": "https://new-avatar.com/image.jpg"
 }
-```
-
-### 6. 实时统计 `/api/v1/dashboard`
-
-#### 获取仪表板数据
-
-```http
-GET /api/v1/dashboard/stats
-Authorization: Bearer {token}
 
 Response:
 {
   "success": true,
   "data": {
-    "real_time": {
-      "active_conversations": 45,
-      "pending_conversations": 12,
-      "online_agents": 8,
-      "avg_response_time": 120  // 秒
-    },
-    "today": {
-      "new_conversations": 156,
-      "resolved_conversations": 134,
-      "total_messages": 892,
-      "avg_resolution_time": 1800  // 秒
-    },
-    "this_week": {
-      "conversations_count": 1024,
-      "resolution_rate": 0.89,
-      "csat_score": 4.2
+    "customer": {
+      "id": 789,
+      "name": "新客户姓名",
+      "email": "new@example.com",
+      "phone": "+86 139****9999",
+      "avatar_url": "https://new-avatar.com/image.jpg",
+      "updated_at": "2024-01-15T11:00:00Z"
     }
   }
 }
 ```
 
-### 7. 报表管理 `/api/v1/reports`
+#### 获取客户会话历史
 
-#### 会话报表
+```http
+GET /api/v1/customers/{customer_id}/conversations?page=1&per_page=20
+Authorization: Bearer {token}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "conversations": [
+      {
+        "id": 456,
+        "status": "resolved",
+        "channel_type": "web_widget",
+        "assignee": {
+          "id": 123,
+          "name": "客服李四"
+        },
+        "created_at": "2024-01-15T10:00:00Z",
+        "updated_at": "2024-01-15T11:00:00Z"
+      }
+    ],
+    "meta": {
+      "current_page": 1,
+      "per_page": 20,
+      "total_count": 5,
+      "total_pages": 1
+    }
+  }
+}
+```
+
+#### 管理客户标签
+
+```http
+POST /api/v1/customers/{customer_id}/tags
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "tags": ["重要客户", "技术支持"]
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "customer": {
+      "id": 789,
+      "tags": ["重要客户", "技术支持"],
+      "updated_at": "2024-01-15T11:00:00Z"
+    }
+  }
+}
+```
+
+### 5. 用户管理 `/api/v1/users`
+
+#### 获取用户列表（管理员权限）
+
+```http
+GET /api/v1/users?page=1&per_page=20&search=张三&role=agent&status=active
+Authorization: Bearer {token}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "users": [
+      {
+        "id": 123,
+        "username": "agent001",
+        "name": "客服张三",
+        "email": "agent@example.com",
+        "role": "agent",
+        "status": "active",
+        "avatar_url": "https://...",
+        "last_login_at": "2024-01-15T10:00:00Z",
+        "created_at": "2024-01-01T00:00:00Z",
+        "updated_at": "2024-01-15T09:00:00Z"
+      }
+    ],
+    "meta": {
+      "current_page": 1,
+      "per_page": 20,
+      "total_count": 25,
+      "total_pages": 2
+    }
+  }
+}
+```
+
+#### 获取用户详情
+
+```http
+GET /api/v1/users/{user_id}
+Authorization: Bearer {token}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": 123,
+      "username": "agent001",
+      "name": "客服张三",
+      "email": "agent@example.com",
+      "role": "agent",
+      "status": "active",
+      "avatar_url": "https://...",
+      "last_login_at": "2024-01-15T10:00:00Z",
+      "created_at": "2024-01-01T00:00:00Z",
+      "updated_at": "2024-01-15T09:00:00Z"
+    }
+  }
+}
+```
+
+#### 创建用户（管理员权限）
+
+```http
+POST /api/v1/users
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "username": "new_agent",
+  "name": "新客服",
+  "email": "new@example.com",
+  "password": "Password123",
+  "role": "agent",
+  "status": "active"
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": 124,
+      "username": "new_agent",
+      "name": "新客服",
+      "email": "new@example.com",
+      "role": "agent",
+      "status": "active",
+      "created_at": "2024-01-15T11:00:00Z"
+    }
+  }
+}
+```
+
+#### 更新用户
+
+```http
+PUT /api/v1/users/{user_id}
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "name": "更新后的姓名",
+  "email": "updated@example.com",
+  "role": "agent",
+  "status": "active"
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": 123,
+      "name": "更新后的姓名",
+      "email": "updated@example.com",
+      "role": "agent",
+      "status": "active",
+      "updated_at": "2024-01-15T11:00:00Z"
+    }
+  }
+}
+```
+
+#### 删除用户（管理员权限）
+
+```http
+DELETE /api/v1/users/{user_id}
+Authorization: Bearer {token}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "message": "用户删除成功"
+  }
+}
+```
+
+#### 重置用户密码（管理员权限）
+
+```http
+POST /api/v1/users/{user_id}/reset-password
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "new_password": "NewPassword123"
+}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "message": "密码重置成功"
+  }
+}
+```
+
+#### 获取用户统计
+
+```http
+GET /api/v1/users/stats
+Authorization: Bearer {token}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "total_users": 25,
+    "active_users": 22,
+    "inactive_users": 3,
+    "online_users": 8,
+    "roles": {
+      "admin": 2,
+      "agent": 20,
+      "viewer": 3
+    }
+  }
+}
+```
+
+### 6. 报表管理 `/api/v1/reports`
+
+#### 获取概览统计
+
+```http
+GET /api/v1/reports/overview?start_date=2024-01-01&end_date=2024-01-31
+Authorization: Bearer {token}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "summary": {
+      "total_conversations": 4856,
+      "resolved_conversations": 4234,
+      "pending_conversations": 245,
+      "closed_conversations": 377,
+      "resolution_rate": 0.87,
+      "avg_response_time": 95,
+      "avg_resolution_time": 1800,
+      "customer_satisfaction": 4.2
+    },
+    "trends": {
+      "conversations_growth": 0.15,
+      "resolution_rate_change": 0.03,
+      "response_time_change": -0.08
+    }
+  }
+}
+```
+
+#### 会话统计报表
 
 ```http
 GET /api/v1/reports/conversations?start_date=2024-01-01&end_date=2024-01-31&group_by=day
@@ -481,6 +986,8 @@ Response:
         "date": "2024-01-01",
         "conversations_count": 156,
         "resolved_count": 134,
+        "pending_count": 12,
+        "closed_count": 10,
         "avg_response_time": 120,
         "avg_resolution_time": 1800
       }
@@ -489,16 +996,17 @@ Response:
       "total_conversations": 4856,
       "total_resolved": 4234,
       "resolution_rate": 0.87,
-      "avg_response_time": 95
+      "avg_response_time": 95,
+      "avg_resolution_time": 1650
     }
   }
 }
 ```
 
-#### 客服工作量报表
+#### 客服绩效报表
 
 ```http
-GET /api/v1/reports/agents?start_date=2024-01-01&end_date=2024-01-31
+GET /api/v1/reports/agents?start_date=2024-01-01&end_date=2024-01-31&agent_id=123
 Authorization: Bearer {token}
 
 Response:
@@ -509,15 +1017,140 @@ Response:
       {
         "agent": {
           "id": 123,
-          "full_name": "客服李四"
+          "name": "客服李四",
+          "email": "agent@example.com"
         },
         "conversations_count": 245,
         "resolved_count": 223,
+        "pending_count": 15,
+        "closed_count": 7,
         "avg_response_time": 85,
-        "csat_score": 4.5,
-        "online_hours": 160
+        "avg_resolution_time": 1650,
+        "customer_satisfaction": 4.5,
+        "online_hours": 160,
+        "resolution_rate": 0.91
       }
-    ]
+    ],
+    "summary": {
+      "total_agents": 12,
+      "avg_conversations_per_agent": 203,
+      "avg_resolution_rate": 0.88,
+      "avg_response_time": 92
+    }
+  }
+}
+```
+
+#### 响应时间统计
+
+```http
+GET /api/v1/reports/response-time?start_date=2024-01-01&end_date=2024-01-31&group_by=day
+Authorization: Bearer {token}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "metrics": [
+      {
+        "date": "2024-01-01",
+        "avg_response_time": 120,
+        "min_response_time": 15,
+        "max_response_time": 600,
+        "median_response_time": 95
+      }
+    ],
+    "summary": {
+      "overall_avg_response_time": 95,
+      "best_day": "2024-01-15",
+      "worst_day": "2024-01-03",
+      "improvement_trend": -0.08
+    }
+  }
+}
+```
+
+#### 满意度统计
+
+```http
+GET /api/v1/reports/satisfaction?start_date=2024-01-01&end_date=2024-01-31&group_by=week
+Authorization: Bearer {token}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "metrics": [
+      {
+        "period": "2024-W01",
+        "avg_rating": 4.2,
+        "total_ratings": 156,
+        "rating_distribution": {
+          "5": 78,
+          "4": 45,
+          "3": 20,
+          "2": 8,
+          "1": 5
+        }
+      }
+    ],
+    "summary": {
+      "overall_satisfaction": 4.2,
+      "total_responses": 1250,
+      "response_rate": 0.65
+    }
+  }
+}
+```
+
+#### 渠道统计
+
+```http
+GET /api/v1/reports/channels?start_date=2024-01-01&end_date=2024-01-31
+Authorization: Bearer {token}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "channels": [
+      {
+        "channel_type": "web_widget",
+        "conversations_count": 2856,
+        "resolved_count": 2534,
+        "avg_response_time": 85,
+        "resolution_rate": 0.89
+      },
+      {
+        "channel_type": "email",
+        "conversations_count": 1245,
+        "resolved_count": 1089,
+        "avg_response_time": 120,
+        "resolution_rate": 0.87
+      }
+    ],
+    "summary": {
+      "total_conversations": 4856,
+      "most_active_channel": "web_widget",
+      "best_performing_channel": "web_widget"
+    }
+  }
+}
+```
+
+#### 导出报表
+
+```http
+GET /api/v1/reports/export?report_type=conversations&start_date=2024-01-01&end_date=2024-01-31&format=csv
+Authorization: Bearer {token}
+
+Response:
+{
+  "success": true,
+  "data": {
+    "download_url": "https://api.example.com/downloads/report_20240115.csv",
+    "expires_at": "2024-01-15T12:00:00Z",
+    "file_size": 2048576
   }
 }
 ```

@@ -1,25 +1,16 @@
-const mysql = require("mysql2/promise");
-const dotenv = require("dotenv");
-const path = require("path");
+const mysql = require('mysql2/promise');
+require('dotenv').config();
 
-// 加载环境变量
-dotenv.config({ path: path.join(__dirname, "../.env") });
-
-// 数据库连接配置
+// 数据库配置
 const dbConfig = {
-  host: process.env.DB_HOST || "localhost",
-  port: parseInt(process.env.DB_PORT) || 3306,
-  user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD || "",
-  database: process.env.DB_NAME || "chat_admin",
-  charset: process.env.DB_CHARSET || "utf8mb4",
-  timezone: process.env.DB_TIMEZONE || "+08:00",
-
-  // 连接池配置
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'chat_admin',
+  port: process.env.DB_PORT || 3306,
+  waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  waitForConnections: true,
-  reconnect: true,
 };
 
 // 创建连接池
@@ -34,8 +25,20 @@ class Database {
   // 执行查询
   async query(sql, params = []) {
     try {
-      const [rows] = await this.pool.execute(sql, params);
-      return rows;
+      // 如果有参数，使用字符串替换而不是prepared statements
+      if (params && params.length > 0) {
+        // 简单的参数替换，将?替换为实际值
+        let processedSql = sql;
+        params.forEach((param, index) => {
+          const value = typeof param === 'string' ? `'${param.replace(/'/g, "\\'")}'` : param;
+          processedSql = processedSql.replace('?', value);
+        });
+        const [rows] = await this.pool.execute(processedSql);
+        return rows;
+      } else {
+        const [rows] = await this.pool.execute(sql);
+        return rows;
+      }
     } catch (error) {
       console.error("Database query error:", error);
       throw error;
@@ -79,86 +82,60 @@ class Database {
       meta: {
         current_page: page,
         per_page: limit,
-        total_count: total,
-        total_pages: Math.ceil(total / limit),
+        total,
+        last_page: Math.ceil(total / limit),
+        from: offset + 1,
+        to: Math.min(offset + limit, total),
       },
     };
   }
 
-  // 插入数据并返回ID
+  // 获取单条记录
+  async findOne(sql, params = []) {
+    const results = await this.query(sql, params);
+    return results.length > 0 ? results[0] : null;
+  }
+
+  // 插入记录
   async insert(table, data) {
     const fields = Object.keys(data);
     const values = Object.values(data);
-    const placeholders = fields.map(() => "?").join(", ");
+    const placeholders = fields.map(() => '?').join(', ');
 
-    const sql = `INSERT INTO ${table} (${fields.join(
-      ", "
-    )}) VALUES (${placeholders})`;
+    const sql = `INSERT INTO ${table} (${fields.join(', ')}) VALUES (${placeholders})`;
     const result = await this.query(sql, values);
-
-    return result.insertId;
+    return result;
   }
 
-  // 更新数据
+  // 更新记录
   async update(table, data, where, whereParams = []) {
     const fields = Object.keys(data);
     const values = Object.values(data);
-    const setClause = fields.map((field) => `${field} = ?`).join(", ");
+    const setClause = fields.map(field => `${field} = ?`).join(', ');
 
     const sql = `UPDATE ${table} SET ${setClause} WHERE ${where}`;
-    const result = await this.query(sql, [...values, ...whereParams]);
-
-    return result.affectedRows;
+    const params = [...values, ...whereParams];
+    const result = await this.query(sql, params);
+    return result;
   }
 
-  // 删除数据
+  // 删除记录
   async delete(table, where, whereParams = []) {
     const sql = `DELETE FROM ${table} WHERE ${where}`;
     const result = await this.query(sql, whereParams);
-
-    return result.affectedRows;
+    return result;
   }
 
-  // 查找单条记录
-  async findOne(table, where, whereParams = [], fields = "*") {
-    const sql = `SELECT ${fields} FROM ${table} WHERE ${where} LIMIT 1`;
-    const result = await this.query(sql, whereParams);
-
-    return result.length > 0 ? result[0] : null;
-  }
-
-  // 查找多条记录
-  async findMany(
-    table,
-    where = "1=1",
-    whereParams = [],
-    fields = "*",
-    orderBy = "id DESC",
-    limit = null
-  ) {
-    let sql = `SELECT ${fields} FROM ${table} WHERE ${where} ORDER BY ${orderBy}`;
-
-    if (limit) {
-      sql += ` LIMIT ${limit}`;
-    }
-
-    return await this.query(sql, whereParams);
-  }
-
-  // 检查连接状态
+  // 检查连接
   async checkConnection() {
     try {
-      await this.query("SELECT 1");
+      await this.query('SELECT 1');
+      console.log('Database connection successful');
       return true;
     } catch (error) {
-      console.error("Database connection check failed:", error);
+      console.error('Database connection failed:', error);
       return false;
     }
-  }
-
-  // 执行查询（兼容方法名）
-  async execute(sql, params = []) {
-    return await this.pool.execute(sql, params);
   }
 
   // 关闭连接池
@@ -168,15 +145,9 @@ class Database {
 }
 
 // 创建数据库实例
-const db = new Database();
+const database = new Database();
 
-// 测试数据库连接
-db.checkConnection().then((isConnected) => {
-  if (isConnected) {
-    console.log("✅ Database connected successfully");
-  } else {
-    console.error("❌ Database connection failed");
-  }
-});
+// 测试连接
+database.checkConnection();
 
-module.exports = db;
+module.exports = database;

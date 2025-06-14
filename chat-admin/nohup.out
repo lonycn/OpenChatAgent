@@ -1,0 +1,103 @@
+
+> chat-admin@1.0.0 start
+> node server.js
+
+
+🚀 Chat Admin Server Started
+📍 Port: 8005
+🌍 Environment: development
+📊 Database: chat_admin
+🔐 JWT Secret: ✓ Configured
+⏰ Timezone: +08:00
+
+📋 Available Endpoints:
+  GET  /health                    - Health check
+  POST /api/v1/auth/login         - User login
+  POST /api/v1/auth/refresh       - Refresh token
+  POST /api/v1/auth/logout        - User logout
+  GET  /api/v1/auth/me            - Get current user
+  PUT  /api/v1/auth/profile       - Update profile
+  PUT  /api/v1/auth/password      - Change password
+  POST /api/v1/auth/register      - Register user (Admin)
+
+🔗 Documentation: http://localhost:8005/health
+  
+Database connection successful
+POST /api/v1/auth/login - 400 - 4ms
+✅ 测试用户登录成功: admin@chatadmin.com
+POST /api/v1/auth/login - 200 - 50ms
+Database query error: TypeError: params.forEach is not a function
+    at Database.query (/Users/orange/aicode/OpenChatAgent/chat-admin/config/database.js:32:16)
+    at Database.findOne (/Users/orange/aicode/OpenChatAgent/chat-admin/config/database.js:95:32)
+    at User.findById (/Users/orange/aicode/OpenChatAgent/chat-admin/models/User.js:65:27)
+    at authenticateToken (/Users/orange/aicode/OpenChatAgent/chat-admin/middleware/auth.js:36:29)
+    at Layer.handle [as handle_request] (/Users/orange/aicode/OpenChatAgent/node_modules/express/lib/router/layer.js:95:5)
+    at next (/Users/orange/aicode/OpenChatAgent/node_modules/express/lib/router/route.js:149:13)
+    at Route.dispatch (/Users/orange/aicode/OpenChatAgent/node_modules/express/lib/router/route.js:119:3)
+    at Layer.handle [as handle_request] (/Users/orange/aicode/OpenChatAgent/node_modules/express/lib/router/layer.js:95:5)
+    at /Users/orange/aicode/OpenChatAgent/node_modules/express/lib/router/index.js:284:15
+    at Function.process_params (/Users/orange/aicode/OpenChatAgent/node_modules/express/lib/router/index.js:346:12)
+Authentication error: TypeError: params.forEach is not a function
+    at Database.query (/Users/orange/aicode/OpenChatAgent/chat-admin/config/database.js:32:16)
+    at Database.findOne (/Users/orange/aicode/OpenChatAgent/chat-admin/config/database.js:95:32)
+    at User.findById (/Users/orange/aicode/OpenChatAgent/chat-admin/models/User.js:65:27)
+    at authenticateToken (/Users/orange/aicode/OpenChatAgent/chat-admin/middleware/auth.js:36:29)
+    at Layer.handle [as handle_request] (/Users/orange/aicode/OpenChatAgent/node_modules/express/lib/router/layer.js:95:5)
+    at next (/Users/orange/aicode/OpenChatAgent/node_modules/express/lib/router/route.js:149:13)
+    at Route.dispatch (/Users/orange/aicode/OpenChatAgent/node_modules/express/lib/router/route.js:119:3)
+    at Layer.handle [as handle_request] (/Users/orange/aicode/OpenChatAgent/node_modules/express/lib/router/layer.js:95:5)
+    at /Users/orange/aicode/OpenChatAgent/node_modules/express/lib/router/index.js:284:15
+    at Function.process_params (/Users/orange/aicode/OpenChatAgent/node_modules/express/lib/router/index.js:346:12)
+GET /api/v1/auth/me - 500 - 2ms
+Database query error: TypeError: params.forEach is not a function
+    at Database.query (/Users/orange/aicode/OpenChatAgent/chat-admin/config/database.js:32:16)
+    at Database.findOne (/Users/orange/aicode/OpenChatAgent/chat-admin/config/database.js:95:32)
+    at User.findById (/Users/orange/aicode/OpenChatAgent/chat-admin/models/User.js:65:27)
+    at authenticateToken (/Users/orange/aicode/OpenChatAgent/chat-admin/middleware/auth.js:36:29)
+    at Layer.handle [as handle_request] (/Users/orange/aicode/OpenChatAgent/node_modules/express/lib/router/layer.js:95:5)
+    at next (/Users/orange/aicode/OpenChatAgent/node_modules/express/lib/router/route.js:149:13)
+    at Route.dispatch (/Users/orange/aicode/OpenChatAgent/node_modules/express/lib/router/route.js:119:3)
+    at Layer.handle [as handle_request] (/Users/orange/aicode/OpenChatAgent/node_modules/express/lib/router/layer.js:95:5)
+    at /Users/orange/aicode/OpenChatAgent/node_modules/express/lib/router/index.js:284:15
+    at Function.process_params (/Users/orange/aicode/OpenChatAgent/node_modules/express/lib/router/index.js:346:12)
+Authentication error: TypeError: params.forEach is not a function
+    at Database.query (/Users/orange/aicode/OpenChatAgent/chat-admin/config/database.js:32:16)
+    at Database.findOne (/Users/orange/aicode/OpenChatAgent/chat-admin/config/database.js:95:32)
+    at User.findById (/Users/orange/aicode/OpenChatAgent/chat-admin/models/User.js:65:27)
+    at authenticateToken (/Users/orange/aicode/OpenChatAgent/chat-admin/middleware/auth.js:36:29)
+    at Layer.handle [as handle_request] (/Users/orange/aicode/OpenChatAgent/node_modules/express/lib/router/layer.js:95:5)
+    at next (/Users/orange/aicode/OpenChatAgent/node_modules/express/lib/router/route.js:149:13)
+    at Route.dispatch (/Users/orange/aicode/OpenChatAgent/node_modules/express/lib/router/route.js:119:3)
+    at Layer.handle [as handle_request] (/Users/orange/aicode/OpenChatAgent/node_modules/express/lib/router/layer.js:95:5)
+    at /Users/orange/aicode/OpenChatAgent/node_modules/express/lib/router/index.js:284:15
+    at Function.process_params (/Users/orange/aicode/OpenChatAgent/node_modules/express/lib/router/index.js:346:12)
+GET /api/v1/auth/me - 500 - 2ms
+SIGTERM received, shutting down gracefully
+Database connection closed
+
+> chat-admin@1.0.0 start
+> node server.js
+
+
+🚀 Chat Admin Server Started
+📍 Port: 8005
+🌍 Environment: development
+📊 Database: chat_admin
+🔐 JWT Secret: ✓ Configured
+⏰ Timezone: +08:00
+
+📋 Available Endpoints:
+  GET  /health                    - Health check
+  POST /api/v1/auth/login         - User login
+  POST /api/v1/auth/refresh       - Refresh token
+  POST /api/v1/auth/logout        - User logout
+  GET  /api/v1/auth/me            - Get current user
+  PUT  /api/v1/auth/profile       - Update profile
+  PUT  /api/v1/auth/password      - Change password
+  POST /api/v1/auth/register      - Register user (Admin)
+
+🔗 Documentation: http://localhost:8005/health
+  
+Database connection successful
+SIGINT received, shutting down gracefully
+Database connection closed

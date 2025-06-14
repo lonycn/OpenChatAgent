@@ -62,19 +62,22 @@ class User {
 
   // 根据ID查找用户
   static async findById(id) {
-    const user = await db.findOne("users", "id = ?", [id]);
+    const sql = "SELECT * FROM users WHERE id = ?";
+    const user = await db.findOne(sql, [id]);
     return user ? new User(user) : null;
   }
 
   // 根据UUID查找用户
   static async findByUuid(uuid) {
-    const user = await db.findOne("users", "uuid = ?", [uuid]);
+    const sql = "SELECT * FROM users WHERE uuid = ?";
+    const user = await db.findOne(sql, [uuid]);
     return user ? new User(user) : null;
   }
 
   // 根据邮箱查找用户
   static async findByEmail(email) {
-    const user = await db.findOne("users", "email = ?", [email]);
+    const sql = "SELECT * FROM users WHERE email = ?";
+    const user = await db.findOne(sql, [email]);
     return user ? new User(user) : null;
   }
 

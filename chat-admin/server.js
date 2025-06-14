@@ -122,6 +122,15 @@ app.get("/health", async (req, res) => {
 // API路由
 app.use("/api/v1/auth", loginLimiter, authRoutes);
 app.use("/api/v1/conversations", conversationRoutes);
+app.use("/api/v1/customers", require("./src/routes/customers"));
+app.use("/api/v1/users", require("./src/routes/users"));
+app.use("/api/v1/reports", require("./src/routes/reports"));
+app.use("/api/v1/tags", require("./src/routes/tags"));
+app.use("/api/v1/permissions", require("./src/routes/permissions"));
+
+// 兼容 Ant Design Pro 默认API路径
+app.use("/api/login", loginLimiter, authRoutes); // 兼容前端默认路径
+app.use("/api/auth", loginLimiter, authRoutes); // 兼容简化路径
 
 // 404处理
 app.use("*", (req, res) => {

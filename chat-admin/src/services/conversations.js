@@ -348,47 +348,204 @@ class ConversationService {
     }
   }
 
-  // 发送消息
-  static async sendMessage(
-    conversationId,
-    senderId,
-    content,
-    messageType = "text",
-    isPrivate = false
-  ) {
-    const messageUuid = uuidv4();
-
-    const sql = `
-      INSERT INTO messages (uuid, conversation_id, sender_type, sender_id, content, message_type, is_private)
-      VALUES (?, ?, 'agent', ?, ?, ?, ?)
-    `;
-
+  // 接管会话
+  static async takeover(conversationId, userId) {
     try {
-      const [result] = await db.execute(sql, [
-        messageUuid,
-        conversationId,
-        senderId,
-        content,
-        messageType,
-        isPrivate,
-      ]);
 
-      // 更新会话的更新时间
-      await db.execute(
-        "UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        [conversationId]
+
+      // 检查会话是否存在
+      const conversation = await this.getById(conversationId);
+      if (!conversation) {
+        throw new Error("会话不存在");
+      }
+
+      const now = new Date();
+
+      // 更新会话分配和代理类型
+      await db.query(
+        `UPDATE conversations SET 
+          assignee_id = ?, 
+          current_agent_type = 'human',
+          agent_switched_at = ?,
+          status = CASE WHEN status = 'open' THEN 'pending' ELSE status END,
+          updated_at = ?
+        WHERE id = ?`,
+        [userId, now, now, conversationId]
+      );
+
+      return await this.getById(conversationId);
+    } catch (error) {
+      console.error("ConversationService.takeover error:", error);
+      throw error;
+    }
+  }
+
+  // 更新会话状态
+  static async updateStatus(conversationId, status, userId) {
+    try {
+
+
+      // 检查会话是否存在
+      const conversation = await this.getById(conversationId);
+      if (!conversation) {
+        throw new Error("会话不存在");
+      }
+
+      const now = new Date();
+
+      // 更新会话状态
+      await db.query(
+        `UPDATE conversations SET 
+          status = ?,
+          updated_at = ?
+        WHERE id = ?`,
+        [status, now, conversationId]
+      );
+
+      return await this.getById(conversationId);
+    } catch (error) {
+      console.error("ConversationService.updateStatus error:", error);
+      throw error;
+    }
+  }
+
+  // 切换代理类型
+  static async switchAgentType(conversationId, agentType, userId) {
+    try {
+
+
+      // 检查会话是否存在
+      const conversation = await this.getById(conversationId);
+      if (!conversation) {
+        throw new Error("会话不存在");
+      }
+
+      const now = new Date();
+      let updateFields = {
+        current_agent_type: agentType,
+        agent_switched_at: now,
+        updated_at: now
+      };
+
+      // 如果切换到人工，分配给当前用户
+      if (agentType === 'human') {
+        updateFields.assignee_id = userId;
+        updateFields.status = 'pending';
+      }
+
+      const setClause = Object.keys(updateFields).map(key => `${key} = ?`).join(', ');
+      const values = Object.values(updateFields);
+      values.push(conversationId);
+
+      await db.query(
+        `UPDATE conversations SET ${setClause} WHERE id = ?`,
+        values
+      );
+
+      return await this.getById(conversationId);
+    } catch (error) {
+      console.error("ConversationService.switchAgentType error:", error);
+      throw error;
+    }
+  }
+
+  // 添加私有备注
+  static async addNote(conversationId, content, userId) {
+    try {
+
+
+      // 检查会话是否存在
+      const conversation = await this.getById(conversationId);
+      if (!conversation) {
+        throw new Error("会话不存在");
+      }
+
+      const messageUuid = uuidv4();
+      const now = new Date();
+
+      // 插入私有备注消息
+      await db.query(
+        `INSERT INTO messages (
+          uuid, conversation_id, sender_id, sender_type, content, 
+          message_type, is_private, created_at
+        ) VALUES (?, ?, ?, 'agent', ?, 'text', true, ?)`,
+        [
+          messageUuid,
+          conversationId,
+          userId,
+          content,
+          now,
+        ]
       );
 
       return {
-        id: result.insertId,
         uuid: messageUuid,
         conversation_id: conversationId,
+        sender_id: userId,
         sender_type: "agent",
+        content,
+        message_type: "text",
+        is_private: true,
+        created_at: now,
+      };
+    } catch (error) {
+      console.error("ConversationService.addNote error:", error);
+      throw error;
+    }
+  }
+
+  // 发送消息
+  static async sendMessage(
+    conversationId,
+    content,
+    senderId,
+    messageType = "text",
+    isPrivate = false
+  ) {
+    try {
+
+
+      // 检查会话是否存在
+      const conversation = await this.getById(conversationId);
+      if (!conversation) {
+        throw new Error("会话不存在");
+      }
+
+      const messageUuid = uuidv4();
+      const now = new Date();
+
+      // 插入消息
+      await db.query(
+        `INSERT INTO messages (
+          uuid, conversation_id, sender_id, sender_type, content, 
+          message_type, is_private, created_at
+        ) VALUES (?, ?, ?, 'agent', ?, ?, ?, ?)`,
+        [
+          messageUuid,
+          conversationId,
+          senderId,
+          content,
+          messageType,
+          isPrivate,
+          now,
+        ]
+      );
+
+      // 更新会话最后活动时间
+      await db.query(
+        "UPDATE conversations SET last_activity_at = ? WHERE id = ?",
+        [now, conversationId]
+      );
+
+      return {
+        uuid: messageUuid,
+        conversation_id: conversationId,
         sender_id: senderId,
+        sender_type: "agent",
         content,
         message_type: messageType,
         is_private: isPrivate,
-        created_at: new Date().toISOString(),
+        created_at: now,
       };
     } catch (error) {
       console.error("ConversationService.sendMessage error:", error);
