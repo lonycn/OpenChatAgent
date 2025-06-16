@@ -24,11 +24,17 @@ chat-ui/.env.local
 chat-core/.env
 ai-service/.env
 chat-session/.env
+chat-admin/.env
+chat-api/.env
+
+venv/
+chat-api/venv/
 
 # 构建输出
 dist/
 build/
 chat-ui/dist/
+chat-admin-ui/dist/
 
 # 日志文件
 logs
@@ -59,4 +65,4 @@ coverage/
 
 # 临时文件
 *.tmp
-*.temp 
+*.temp

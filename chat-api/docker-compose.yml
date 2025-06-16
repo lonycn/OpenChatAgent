@@ -1,0 +1,365 @@
+# 🐳 Chat API Docker Compose Configuration
+version: '3.8'
+
+# ==========================================
+# 🌐 Networks
+# ==========================================
+networks:
+  chat-api-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# ==========================================
+# 💾 Volumes
+# ==========================================
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+  elasticsearch_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# ==========================================
+# 🔧 Services
+# ==========================================
+services:
+  # ==========================================
+  # 🚀 Chat API Application
+  # ==========================================
+  chat-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+      args:
+        BUILD_DATE: ${BUILD_DATE:-}
+        VCS_REF: ${VCS_REF:-}
+        VERSION: ${VERSION:-1.0.0}
+    container_name: chat-api
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8000}:8000"
+      - "9090:9090"  # Metrics port
+    environment:
+      # Application
+      - APP_NAME=${APP_NAME:-Chat API}
+      - DEBUG=${DEBUG:-false}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      
+      # Database
+      - DATABASE_URL=mysql+asyncmy://chat_user:${MYSQL_PASSWORD:-chat_password}@mysql:3306/chat_api
+      
+      # Redis
+      - REDIS_URL=redis://redis:6379/0
+      
+      # Security
+      - SECRET_KEY=${SECRET_KEY:-change-this-secret-key}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-this-jwt-secret}
+      
+      # AI Services
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      
+      # Monitoring
+      - METRICS_ENABLED=true
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+      - ./static:/app/static
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - chat-api-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ==========================================
+  # 🗄️ MySQL Database
+  # ==========================================
+  mysql:
+    image: mysql:8.0
+    container_name: chat-api-mysql
+    restart: unless-stopped
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password}
+      MYSQL_DATABASE: chat_api
+      MYSQL_USER: chat_user
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-chat_password}
+      MYSQL_CHARACTER_SET_SERVER: utf8mb4
+      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
+      - ./mysql/conf.d:/etc/mysql/conf.d
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --innodb-buffer-pool-size=256M
+      --max-connections=200
+    networks:
+      - chat-api-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root_password}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ==========================================
+  # 🔴 Redis Cache
+  # ==========================================
+  redis:
+    image: redis:7-alpine
+    container_name: chat-api-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf
+    command: redis-server /usr/local/etc/redis/redis.conf
+    networks:
+      - chat-api-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ==========================================
+  # 🌐 Nginx Reverse Proxy
+  # ==========================================
+  nginx:
+    image: nginx:alpine
+    container_name: chat-api-nginx
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./ssl:/etc/nginx/ssl
+      - ./static:/var/www/static
+    depends_on:
+      - chat-api
+    networks:
+      - chat-api-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================
+  # 🔍 Elasticsearch (Optional)
+  # ==========================================
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: chat-api-elasticsearch
+    restart: unless-stopped
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - chat-api-network
+    profiles:
+      - search
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ==========================================
+  # 📊 Prometheus Monitoring
+  # ==========================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: chat-api-prometheus
+    restart: unless-stopped
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - chat-api-network
+    profiles:
+      - monitoring
+
+  # ==========================================
+  # 📈 Grafana Dashboard
+  # ==========================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: chat-api-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+    networks:
+      - chat-api-network
+    profiles:
+      - monitoring
+
+  # ==========================================
+  # 🔄 Celery Worker (Optional)
+  # ==========================================
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: chat-api-celery-worker
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=mysql+asyncmy://chat_user:${MYSQL_PASSWORD:-chat_password}@mysql:3306/chat_api
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/2
+      - CELERY_RESULT_BACKEND=redis://redis:6379/3
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - chat-api-network
+    command: celery -A src.core.celery worker --loglevel=info
+    profiles:
+      - queue
+
+  # ==========================================
+  # 📊 Celery Flower (Optional)
+  # ==========================================
+  celery-flower:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: chat-api-celery-flower
+    restart: unless-stopped
+    ports:
+      - "5555:5555"
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/2
+      - CELERY_RESULT_BACKEND=redis://redis:6379/3
+    depends_on:
+      - redis
+      - celery-worker
+    networks:
+      - chat-api-network
+    command: celery -A src.core.celery flower --port=5555
+    profiles:
+      - queue
+
+  # ==========================================
+  # 📝 Log Aggregation (Optional)
+  # ==========================================
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.11.0
+    container_name: chat-api-filebeat
+    restart: unless-stopped
+    user: root
+    volumes:
+      - ./monitoring/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - ./logs:/var/log/chat-api:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - elasticsearch
+    networks:
+      - chat-api-network
+    profiles:
+      - logging
+
+# ==========================================
+# 🔧 Development Override
+# ==========================================
+# Use: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+# This allows for development-specific overrides
+
+# ==========================================
+# 📋 Usage Examples
+# ==========================================
+
+# Start basic services:
+# docker-compose up -d
+
+# Start with monitoring:
+# docker-compose --profile monitoring up -d
+
+# Start with search:
+# docker-compose --profile search up -d
+
+# Start with queue:
+# docker-compose --profile queue up -d
+
+# Start everything:
+# docker-compose --profile monitoring --profile search --profile queue --profile logging up -d
+
+# View logs:
+# docker-compose logs -f chat-api
+
+# Scale services:
+# docker-compose up -d --scale chat-api=3
+
+# Stop services:
+# docker-compose down
+
+# Remove volumes:
+# docker-compose down -v
+
+# ==========================================
+# 🔒 Security Notes
+# ==========================================
+
+# 1. Change default passwords in production
+# 2. Use secrets management for sensitive data
+# 3. Enable SSL/TLS for external access
+# 4. Configure firewall rules
+# 5. Regular security updates
+# 6. Monitor access logs
+# 7. Use non-root users in containers
+# 8. Limit resource usage

@@ -1,0 +1,38 @@
+# 🐍 Chat API Python Dependencies - Core Only
+
+# ⚡ Web Framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# 💾 Database & ORM
+sqlalchemy>=2.0.23
+asyncmy>=0.2.9  # MySQL async driver
+
+# 🔴 Redis & Caching
+redis>=5.0.1
+
+# 🤖 HTTP Clients
+httpx>=0.25.2
+
+# 🔒 Authentication & Security
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+python-multipart>=0.0.6
+
+# 📊 Data Validation & Serialization
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# 📝 Logging
+loguru>=0.7.2
+
+# 🛠️ Utilities
+python-dotenv>=1.0.0
+
+# 📈 Metrics & Monitoring (Optional)
+psutil>=5.9.6
+prometheus-client>=0.19.0
+
+# 🔧 Development Tools (Optional)
+pytest>=7.4.3
+pytest-asyncio>=0.21.1
