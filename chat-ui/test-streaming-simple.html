@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>流式回复测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .connected { background: #f6ffed; color: #52c41a; border: 1px solid #b7eb8f; }
+        .disconnected { background: #fff2f0; color: #ff4d4f; border: 1px solid #ffccc7; }
+        .message {
+            margin: 10px 0;
+            padding: 12px;
+            border-radius: 8px;
+            background: #f0f8ff;
+            border-left: 4px solid #1890ff;
+        }
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            gap: 10px;
+        }
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .primary { background: #1890ff; color: white; }
+        .success { background: #52c41a; color: white; }
+        .danger { background: #ff4d4f; color: white; }
+        #log {
+            background: #f8f8f8;
+            border: 1px solid #d9d9d9;
+            border-radius: 4px;
+            padding: 10px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>流式回复测试</h1>
+        
+        <div id="status" class="status disconnected">
+            ● 未连接
+        </div>
+        
+        <div class="controls">
+            <button id="connect" class="primary">连接</button>
+            <button id="disconnect" class="danger">断开</button>
+            <button id="sendTest" class="success">发送测试消息</button>
+            <button id="clearLog">清空日志</button>
+        </div>
+        
+        <div id="messages"></div>
+        
+        <h3>调试日志</h3>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        let ws = null;
+        let messageId = 0;
+        
+        const statusEl = document.getElementById('status');
+        const messagesEl = document.getElementById('messages');
+        const logEl = document.getElementById('log');
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logEl.textContent += `[${timestamp}] ${message}\n`;
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+        
+        function updateStatus(connected) {
+            if (connected) {
+                statusEl.className = 'status connected';
+                statusEl.textContent = '● 已连接';
+            } else {
+                statusEl.className = 'status disconnected';
+                statusEl.textContent = '● 未连接';
+            }
+        }
+        
+        function connect() {
+            if (ws) {
+                ws.close();
+            }
+            
+            ws = new WebSocket('ws://localhost:8002');
+            
+            ws.onopen = () => {
+                log('WebSocket连接已建立');
+                updateStatus(true);
+                
+                // 发送初始化消息
+                const initMessage = {
+                    type: 'init',
+                    userId: 'test_user_' + Date.now(),
+                    sessionId: 'test_session_' + Date.now()
+                };
+                ws.send(JSON.stringify(initMessage));
+                log('发送初始化消息: ' + JSON.stringify(initMessage));
+            };
+            
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    log('收到消息: ' + JSON.stringify(data));
+                    
+                    if (data.type === 'streaming') {
+                        handleStreamingMessage(data);
+                    }
+                } catch (error) {
+                    log('解析消息失败: ' + error.message);
+                }
+            };
+            
+            ws.onclose = () => {
+                log('WebSocket连接已关闭');
+                updateStatus(false);
+            };
+            
+            ws.onerror = (error) => {
+                log('WebSocket错误: ' + error.message);
+                updateStatus(false);
+            };
+        }
+        
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+        
+        function sendTestMessage() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('WebSocket未连接');
+                return;
+            }
+            
+            const message = {
+                type: 'message',
+                content: '为什么要写作业',
+                messageId: 'test_' + (++messageId)
+            };
+            
+            ws.send(JSON.stringify(message));
+            log('发送测试消息: ' + JSON.stringify(message));
+        }
+        
+        function handleStreamingMessage(data) {
+            const messageId = data.id;
+            const fullText = data.fullText || '';
+            const isComplete = data.isComplete || false;
+            
+            let messageEl = document.getElementById('msg_' + messageId);
+            
+            if (!messageEl) {
+                messageEl = document.createElement('div');
+                messageEl.id = 'msg_' + messageId;
+                messageEl.className = 'message';
+                messagesEl.appendChild(messageEl);
+            }
+            
+            // 使用简单的流式显示效果
+            messageEl.innerHTML = `
+                <strong>AI助手:</strong><br>
+                <span id="text_${messageId}">${fullText}</span>
+                ${!isComplete ? '<span style="animation: blink 1s infinite;">|</span>' : ''}
+            `;
+            
+            if (isComplete) {
+                log(`流式消息完成: ${messageId}`);
+            }
+        }
+        
+        function clearLog() {
+            logEl.textContent = '';
+        }
+        
+        // 绑定事件
+        document.getElementById('connect').onclick = connect;
+        document.getElementById('disconnect').onclick = disconnect;
+        document.getElementById('sendTest').onclick = sendTestMessage;
+        document.getElementById('clearLog').onclick = clearLog;
+        
+        // 添加CSS动画
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes blink {
+                0%, 50% { opacity: 1; }
+                51%, 100% { opacity: 0; }
+            }
+        `;
+        document.head.appendChild(style);
+        
+        log('测试页面已加载');
+    </script>
+</body>
+</html> 

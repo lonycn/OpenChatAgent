@@ -1,0 +1,43 @@
+{
+  "name": "chat-front",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 8001",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": [
+    "chat",
+    "websocket",
+    "ant-design-x",
+    "react",
+    "markdown"
+  ],
+  "author": "AI Assistant",
+  "license": "MIT",
+  "description": "基于 Ant Design X 的智能客服前端系统，支持Markdown渲染",
+  "dependencies": {
+    "@ant-design/icons": "^5.5.2",
+    "@ant-design/x": "^1.4.0",
+    "antd": "^5.23.0",
+    "dayjs": "^1.11.13",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^9.0.1",
+    "remark-gfm": "^4.0.0",
+    "uuid": "^11.1.0",
+    "ws": "^8.18.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^4.4.1",
+    "typescript": "^5.7.3",
+    "vite": "^6.3.5"
+  }
+}

@@ -1,0 +1,26 @@
+.Avatar {
+  --avatar-size: 32px;
+
+  display: inline-block;
+  overflow: hidden;
+  border-radius: 50%;
+
+  img {
+    display: block;
+    width: var(--avatar-size);
+    height: var(--avatar-size);
+    object-fit: cover;
+  }
+}
+
+.Avatar--sm {
+  --avatar-size: 18px;
+}
+
+.Avatar--lg {
+  --avatar-size: 40px;
+}
+
+.Avatar--square {
+  border-radius: var(--radius-md);
+}

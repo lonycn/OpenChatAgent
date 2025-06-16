@@ -66,7 +66,7 @@ if [ ! -d "node_modules" ]; then
 fi
 
 # 检查各模块依赖
-for module in "chat-ui" "chat-core" "ai-service" "chat-session" "chat-admin"; do
+for module in "chat-front" "chat-core" "ai-service" "chat-session" "chat-admin"; do
     if [ -d "$module" ] && [ ! -d "$module/node_modules" ]; then
         echo "📦 安装 $module 依赖..."
         cd "$module" && npm install && cd ..
@@ -92,7 +92,7 @@ fi
 echo ""
 echo "🚀 启动所有开发服务..."
 echo "📋 服务列表:"
-echo "  - chat-ui (用户前端): http://localhost:8001"
+echo "  - chat-front (用户前端): http://localhost:8001"
 echo "  - chat-core (API网关): http://localhost:8002"
 echo "  - ai-service (AI服务): http://localhost:8003"
 echo "  - chat-session (会话服务): http://localhost:8004"

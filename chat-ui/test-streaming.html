@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>流式消息测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-container {
+            border: 1px solid #ddd;
+            padding: 20px;
+            margin: 10px 0;
+            border-radius: 8px;
+        }
+        .message {
+            background: #f0f0f0;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+        }
+        .stream-message {
+            background: #e6f7ff;
+            border-left: 4px solid #1890ff;
+        }
+        .complete-message {
+            background: #f6ffed;
+            border-left: 4px solid #52c41a;
+        }
+        button {
+            background: #1890ff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #40a9ff;
+        }
+        .log {
+            background: #f5f5f5;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>流式消息处理测试</h1>
+    
+    <div class="test-container">
+        <h3>WebSocket连接测试</h3>
+        <button onclick="connectWebSocket()">连接WebSocket</button>
+        <button onclick="disconnectWebSocket()">断开连接</button>
+        <button onclick="sendTestMessage()">发送测试消息</button>
+        <div id="connection-status">未连接</div>
+    </div>
+
+    <div class="test-container">
+        <h3>消息显示区域</h3>
+        <div id="messages"></div>
+    </div>
+
+    <div class="test-container">
+        <h3>调试日志</h3>
+        <button onclick="clearLog()">清空日志</button>
+        <div id="log" class="log"></div>
+    </div>
+
+    <script>
+        let ws = null;
+        let messageId = 0;
+
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        function updateConnectionStatus(status) {
+            document.getElementById('connection-status').textContent = status;
+        }
+
+        function addMessage(content, type = 'normal') {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type === 'stream' ? 'stream-message' : type === 'complete' ? 'complete-message' : ''}`;
+            messageDiv.innerHTML = `<strong>${type.toUpperCase()}:</strong> ${content}`;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function connectWebSocket() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                log('WebSocket已经连接');
+                return;
+            }
+
+            ws = new WebSocket('ws://localhost:8002');
+            
+            ws.onopen = function() {
+                log('WebSocket连接成功');
+                updateConnectionStatus('已连接');
+                
+                // 发送初始化消息
+                const initMessage = {
+                    type: 'init',
+                    payload: {
+                        userAgent: navigator.userAgent,
+                        timestamp: new Date().toISOString(),
+                        userId: 'test_user_' + Date.now()
+                    }
+                };
+                ws.send(JSON.stringify(initMessage));
+                log('发送初始化消息: ' + JSON.stringify(initMessage));
+            };
+
+            ws.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    log('收到消息: ' + JSON.stringify(data));
+                    
+                    if (data.type === 'stream') {
+                        addMessage(`ID: ${data.id}, Text: "${data.text}", FullText: "${data.fullText}", Complete: ${data.isComplete}`, 'stream');
+                    } else if (data.type === 'response') {
+                        addMessage(`ID: ${data.id}, Text: "${data.text || data.fullText}", Complete: ${data.isComplete}`, 'complete');
+                    } else {
+                        addMessage(JSON.stringify(data), 'normal');
+                    }
+                } catch (e) {
+                    log('解析消息失败: ' + e.message);
+                    addMessage('解析失败: ' + event.data, 'normal');
+                }
+            };
+
+            ws.onclose = function() {
+                log('WebSocket连接关闭');
+                updateConnectionStatus('已断开');
+            };
+
+            ws.onerror = function(error) {
+                log('WebSocket错误: ' + error);
+                updateConnectionStatus('连接错误');
+            };
+        }
+
+        function disconnectWebSocket() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        function sendTestMessage() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('WebSocket未连接');
+                return;
+            }
+
+            const testMessage = {
+                type: 'text',
+                text: '请给我讲一个故事',
+                id: 'test_' + (++messageId),
+                timestamp: new Date().toISOString(),
+                userId: 'test_user_' + Date.now()
+            };
+
+            ws.send(JSON.stringify(testMessage));
+            log('发送测试消息: ' + JSON.stringify(testMessage));
+            addMessage('用户: ' + testMessage.text, 'normal');
+        }
+
+        // 页面加载时自动连接
+        window.onload = function() {
+            log('页面加载完成');
+        };
+    </script>
+</body>
+</html> 
