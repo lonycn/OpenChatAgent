@@ -1,0 +1,332 @@
+<script setup lang="tsx">
+import { reactive, ref, watch, onMounted, unref } from 'vue'
+import { Form, FormSchema } from '@/components/Form'
+import { useI18n } from '@/hooks/web/useI18n'
+import { ElCheckbox, ElLink } from 'element-plus'
+import { useForm } from '@/hooks/web/useForm'
+import { loginApi, getTestRoleApi, getAdminRoleApi } from '@/api/login'
+import { useAppStore } from '@/store/modules/app'
+import { usePermissionStore } from '@/store/modules/permission'
+import { useRouter } from 'vue-router'
+import type { RouteLocationNormalizedLoaded, RouteRecordRaw } from 'vue-router'
+import { UserType } from '@/api/login/types'
+import { useValidator } from '@/hooks/web/useValidator'
+import { Icon } from '@/components/Icon'
+import { useUserStore } from '@/store/modules/user'
+import { BaseButton } from '@/components/Button'
+import request from '@/axios'
+
+const { required } = useValidator()
+
+const emit = defineEmits(['to-register'])
+
+const appStore = useAppStore()
+
+const userStore = useUserStore()
+
+const permissionStore = usePermissionStore()
+
+const { currentRoute, addRoute, push } = useRouter()
+
+const { t } = useI18n()
+
+const rules = {
+  email: [required()],
+  password: [required()]
+}
+
+const schema = reactive<FormSchema[]>([
+  {
+    field: 'title',
+    colProps: {
+      span: 24
+    },
+    formItemProps: {
+      slots: {
+        default: () => {
+          return <h2 class="text-2xl font-bold text-center w-[100%]">{t('login.login')}</h2>
+        }
+      }
+    }
+  },
+  {
+    field: 'email',
+    label: t('login.email'),
+    // value: 'admin@example.com',
+    component: 'Input',
+    colProps: {
+      span: 24
+    },
+    componentProps: {
+      placeholder: 'admin@example.com'
+    }
+  },
+  {
+    field: 'password',
+    label: t('login.password'),
+    // value: 'admin',
+    component: 'InputPassword',
+    colProps: {
+      span: 24
+    },
+    componentProps: {
+      style: {
+        width: '100%'
+      },
+      placeholder: '请输入密码',
+      // 按下enter键触发登录
+      onKeydown: (_e: any) => {
+        if (_e.key === 'Enter') {
+          _e.stopPropagation() // 阻止事件冒泡
+          signIn()
+        }
+      }
+    }
+  },
+  {
+    field: 'tool',
+    colProps: {
+      span: 24
+    },
+    formItemProps: {
+      slots: {
+        default: () => {
+          return (
+            <>
+              <div class="flex justify-between items-center w-[100%]">
+                <ElCheckbox v-model={remember.value} label={t('login.remember')} size="small" />
+                <ElLink type="primary" underline={false}>
+                  {t('login.forgetPassword')}
+                </ElLink>
+              </div>
+            </>
+          )
+        }
+      }
+    }
+  },
+  {
+    field: 'login',
+    colProps: {
+      span: 24
+    },
+    formItemProps: {
+      slots: {
+        default: () => {
+          return (
+            <>
+              <div class="w-[100%]">
+                <BaseButton
+                  loading={loading.value}
+                  type="primary"
+                  class="w-[100%]"
+                  onClick={signIn}
+                >
+                  {t('login.login')}
+                </BaseButton>
+              </div>
+              <div class="w-[100%] mt-15px">
+                <BaseButton class="w-[100%]" onClick={toRegister}>
+                  {t('login.register')}
+                </BaseButton>
+              </div>
+            </>
+          )
+        }
+      }
+    }
+  },
+  {
+    field: 'other',
+    component: 'Divider',
+    label: t('login.otherLogin'),
+    componentProps: {
+      contentPosition: 'center'
+    }
+  },
+  {
+    field: 'otherIcon',
+    colProps: {
+      span: 24
+    },
+    formItemProps: {
+      slots: {
+        default: () => {
+          return (
+            <>
+              <div class="flex justify-between w-[100%]">
+                <Icon
+                  icon="vi-ant-design:github-filled"
+                  size={iconSize}
+                  class="cursor-pointer ant-icon"
+                  color={iconColor}
+                  hoverColor={hoverColor}
+                />
+                <Icon
+                  icon="vi-ant-design:wechat-filled"
+                  size={iconSize}
+                  class="cursor-pointer ant-icon"
+                  color={iconColor}
+                  hoverColor={hoverColor}
+                />
+                <Icon
+                  icon="vi-ant-design:alipay-circle-filled"
+                  size={iconSize}
+                  color={iconColor}
+                  hoverColor={hoverColor}
+                  class="cursor-pointer ant-icon"
+                />
+                <Icon
+                  icon="vi-ant-design:weibo-circle-filled"
+                  size={iconSize}
+                  color={iconColor}
+                  hoverColor={hoverColor}
+                  class="cursor-pointer ant-icon"
+                />
+              </div>
+            </>
+          )
+        }
+      }
+    }
+  }
+])
+
+const iconSize = 30
+
+const remember = ref(userStore.getRememberMe)
+
+const initLoginInfo = () => {
+  const loginInfo = userStore.getLoginInfo
+  if (loginInfo) {
+    const { email, password } = loginInfo
+    setValues({ email, password })
+  }
+}
+onMounted(() => {
+  initLoginInfo()
+})
+
+const { formRegister, formMethods } = useForm()
+const { getFormData, getElFormExpose, setValues } = formMethods
+
+const loading = ref(false)
+
+const iconColor = '#999'
+
+const hoverColor = 'var(--el-color-primary)'
+
+const redirect = ref<string>('')
+
+watch(
+  () => currentRoute.value,
+  (route: RouteLocationNormalizedLoaded) => {
+    redirect.value = route?.query?.redirect as string
+  },
+  {
+    immediate: true
+  }
+)
+
+// 登录
+const signIn = async () => {
+  const formRef = await getElFormExpose()
+  await formRef?.validate(async (isValid) => {
+    if (isValid) {
+      loading.value = true
+      const formData = await getFormData<UserType>()
+
+      try {
+        // 临时模拟登录成功
+        if (formData.email === 'admin@example.com' && formData.password === 'admin123456') {
+          // 模拟成功响应
+          const mockToken = 'mock-jwt-token-' + Date.now()
+          const mockUserInfo = {
+            id: 1,
+            email: formData.email,
+            full_name: '系统管理员',
+            role: 'admin',
+            status: 'active',
+            avatar_url: '',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+
+          // 保存token
+          userStore.setToken(mockToken)
+
+          // 是否记住我
+          if (unref(remember)) {
+            userStore.setLoginInfo({
+              email: formData.email,
+              password: formData.password
+            })
+          } else {
+            userStore.setLoginInfo(undefined)
+          }
+          userStore.setRememberMe(unref(remember))
+
+          // 设置用户信息
+          userStore.setUserInfo(mockUserInfo)
+
+          // 使用静态路由
+          await permissionStore.generateRoutes('static').catch(() => {})
+          permissionStore.getAddRouters.forEach((route) => {
+            addRoute(route as RouteRecordRaw) // 动态添加可访问路由表
+          })
+          permissionStore.setIsAddRouters(true)
+          push({ path: redirect.value || permissionStore.addRouters[0].path })
+
+          ElMessage.success('登录成功')
+        } else {
+          ElMessage.error('用户名或密码错误')
+        }
+      } finally {
+        loading.value = false
+      }
+    }
+  })
+}
+
+// 获取角色信息
+const getRole = async () => {
+  const formData = await getFormData<UserType>()
+  const params = {
+    roleName: formData.email
+  }
+  const res =
+    appStore.getDynamicRouter && appStore.getServerDynamicRouter
+      ? await getAdminRoleApi(params)
+      : await getTestRoleApi(params)
+  if (res) {
+    const routers = res.data || []
+    userStore.setRoleRouters(routers)
+    appStore.getDynamicRouter && appStore.getServerDynamicRouter
+      ? await permissionStore.generateRoutes('server', routers).catch(() => {})
+      : await permissionStore.generateRoutes('frontEnd', routers).catch(() => {})
+
+    permissionStore.getAddRouters.forEach((route) => {
+      addRoute(route as RouteRecordRaw) // 动态添加可访问路由表
+    })
+    permissionStore.setIsAddRouters(true)
+    push({ path: redirect.value || permissionStore.addRouters[0].path })
+  }
+}
+
+// 去注册页面
+const toRegister = () => {
+  emit('to-register')
+}
+</script>
+
+<template>
+  <Form
+    :schema="schema"
+    :rules="rules"
+    label-position="top"
+    hide-required-asterisk
+    size="large"
+    class="dark:(border-1 border-[var(--el-border-color)] border-solid)"
+    @register="formRegister"
+  />
+</template>
