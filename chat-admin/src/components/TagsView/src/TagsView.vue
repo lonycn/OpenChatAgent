@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, watch, computed, unref, ref, nextTick } from 'vue'
+import { ElScrollbar } from 'element-plus'
 import { useRouter } from 'vue-router'
 import type { RouteLocationNormalizedLoaded, RouterLinkProps } from 'vue-router'
 import { usePermissionStore } from '@/store/modules/permission'
@@ -81,14 +82,20 @@ const toLastView = () => {
     push(latestView)
   } else {
     if (
-      unref(currentRoute).path === permissionStore.getAddRouters[0].path ||
-      unref(currentRoute).path === permissionStore.getAddRouters[0].redirect
-    ) {
+        (permissionStore.getAddRouters.length > 0 &&
+          unref(currentRoute).path === permissionStore.getAddRouters[0].path) ||
+        (permissionStore.getAddRouters.length > 0 &&
+          unref(currentRoute).path === permissionStore.getAddRouters[0].redirect)
+      ) {
       addTags()
       return
     }
     // You can set another route
-    push(permissionStore.getAddRouters[0].path)
+    const defaultPath =
+        permissionStore.getAddRouters.length > 0
+          ? permissionStore.getAddRouters[0].path
+          : '/dashboard'
+      push(defaultPath)
   }
 }
 

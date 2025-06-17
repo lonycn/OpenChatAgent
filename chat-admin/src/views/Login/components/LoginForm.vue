@@ -1,5 +1,6 @@
 <script setup lang="tsx">
 import { reactive, ref, watch, onMounted, unref } from 'vue'
+import { ElCheckbox, ElLink, ElMessage } from 'element-plus'
 import { Form, FormSchema } from '@/components/Form'
 import { useI18n } from '@/hooks/web/useI18n'
 import { useForm } from '@/hooks/web/useForm'
@@ -13,7 +14,6 @@ import { useValidator } from '@/hooks/web/useValidator'
 import { Icon } from '@/components/Icon'
 import { useUserStore } from '@/store/modules/user'
 import { BaseButton } from '@/components/Button'
-//ElMessage
 
 import request from '@/axios'
 
@@ -242,9 +242,10 @@ const signIn = async () => {
         if (formData.email === 'admin@example.com' && formData.password === 'admin123456') {
           // 模拟成功响应
           const mockToken = 'mock-jwt-token-' + Date.now()
-          const mockUserInfo = {
+          const mockUserInfo: UserType = {
             id: 1,
             email: formData.email,
+            password: '', // 不存储密码
             full_name: '系统管理员',
             role: 'admin',
             status: 'active',
@@ -276,7 +277,11 @@ const signIn = async () => {
             addRoute(route as RouteRecordRaw) // 动态添加可访问路由表
           })
           permissionStore.setIsAddRouters(true)
-          push({ path: redirect.value || permissionStore.addRouters[0].path })
+          const defaultPath =
+       permissionStore.addRouters.length > 0
+         ? permissionStore.addRouters[0].path
+         : '/dashboard'
+     push({ path: redirect.value || defaultPath })
 
           ElMessage.success('登录成功')
         } else {
@@ -310,7 +315,8 @@ const getRole = async () => {
       addRoute(route as RouteRecordRaw) // 动态添加可访问路由表
     })
     permissionStore.setIsAddRouters(true)
-    push({ path: redirect.value || permissionStore.addRouters[0].path })
+    const defaultPath = permissionStore.addRouters.length > 0 ? permissionStore.addRouters[0].path : '/dashboard'
+    push({ path: redirect.value || defaultPath })
   }
 }
 

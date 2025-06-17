@@ -19,7 +19,7 @@ const props = defineProps({
   hoverColor: propTypes.string
 })
 
-const isLocal = computed(() => props.icon.startsWith('svg-icon:'))
+const isLocal = computed(() => props.icon?.startsWith('svg-icon:') || false)
 
 const symbolId = computed(() => {
   return unref(isLocal) ? `#icon-${props.icon.split('svg-icon:')[1]}` : props.icon
@@ -39,7 +39,9 @@ const getIconifyStyle = computed(() => {
 })
 
 const getIconName = computed(() => {
-  return props.icon.startsWith(ICON_PREFIX) ? props.icon.replace(ICON_PREFIX, '') : props.icon
+  return props.icon?.startsWith(ICON_PREFIX)
+    ? props.icon.replace(ICON_PREFIX, '')
+    : props.icon || ''
 })
 </script>
 

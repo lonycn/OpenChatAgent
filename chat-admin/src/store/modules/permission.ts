@@ -79,20 +79,12 @@ export const usePermissionStore = defineStore('permission', {
   },
   persist: [
     {
-      pick: ['routers'],
-      storage: localStorage
-    },
-    {
-      pick: ['addRouters'],
+      pick: ['routers', 'addRouters', 'menuTabRouters'],
       storage: localStorage
     },
     {
       pick: ['isAddRouters'],
-      storage: localStorage
-    },
-    {
-      pick: ['menuTabRouters'],
-      storage: localStorage
+      storage: sessionStorage // 使用sessionStorage，页面刷新时重新生成路由
     }
   ]
 })
