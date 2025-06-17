@@ -293,7 +293,8 @@ class ConversationService:
         """
         try:
             # 获取会话信息
-            from src.session.manager import session_manager
+            from src.session.manager import get_session_manager
+            session_manager = get_session_manager()
             session = await session_manager.get_session(session_id)
             
             if not session:
@@ -454,7 +455,7 @@ class ConversationService:
         conversations, pagination = await self.list_conversations(page=page, size=size, filters=filters)
         return conversations, pagination.total
 
-    async def create_conversation(self, conversation_data: Dict[str, Any]) -> Conversation:
+    async def create_conversation_from_dict(self, conversation_data: Dict[str, Any]) -> Conversation:
         """
         创建对话（接受字典参数）
 

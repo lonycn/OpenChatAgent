@@ -31,7 +31,7 @@ async def init_redis() -> None:
     初始化 Redis 连接
     创建不同用途的 Redis 客户端
     """
-    global redis_client, session_redis, cache_redis, queue_redis
+    global redis_client, session_redis, cache_redis, queue_redis, redis_manager
     
     try:
         logger.info("🔄 Initializing Redis connections...")
@@ -79,7 +79,10 @@ async def init_redis() -> None:
         
         # 测试连接
         await _test_connections()
-        
+
+        # 初始化 Redis 管理器
+        redis_manager = RedisManager()
+
         logger.info("✅ Redis connections initialized successfully")
         
     except Exception as e:
@@ -92,7 +95,7 @@ async def close_redis() -> None:
     关闭 Redis 连接
     清理资源
     """
-    global redis_client, session_redis, cache_redis, queue_redis
+    global redis_client, session_redis, cache_redis, queue_redis, redis_manager
     
     try:
         logger.info("🔄 Closing Redis connections...")
@@ -103,7 +106,8 @@ async def close_redis() -> None:
                 await client.close()
         
         redis_client = session_redis = cache_redis = queue_redis = None
-        
+        redis_manager = None
+
         logger.info("✅ Redis connections closed")
         
     except Exception as e:
@@ -403,6 +407,9 @@ def get_redis_manager() -> RedisManager:
     """获取 Redis 管理器实例"""
     global redis_manager
     if redis_manager is None:
+        # 如果 Redis 连接还没有初始化，抛出错误
+        if redis_client is None:
+            raise RuntimeError("Redis connections not initialized. Call init_redis() first.")
         redis_manager = RedisManager()
     return redis_manager
 

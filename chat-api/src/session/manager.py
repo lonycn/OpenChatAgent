@@ -14,7 +14,7 @@ from uuid import uuid4
 from loguru import logger
 
 from src.config.settings import get_settings
-from src.core.redis import redis_manager
+from src.core.redis import get_redis_manager
 from src.core.exceptions import SessionException
 from src.models.session import (
     Session, SessionStatus, SessionCreate, SessionUpdate,
@@ -30,7 +30,7 @@ class SessionManager:
     """会话管理器"""
     
     def __init__(self, redis_client=None):
-        self.redis = redis_client or redis_manager
+        self.redis = redis_client or get_redis_manager()
         self.config = SessionConfig()
         
         # Redis键前缀
@@ -446,10 +446,23 @@ class SessionManager:
         logger.info("Session manager shutdown complete")
 
 
-# 全局会话管理器实例
-session_manager = SessionManager()
+# 全局会话管理器实例（延迟初始化）
+session_manager: Optional[SessionManager] = None
 
 
-async def init_session_manager():
+def init_session_manager() -> None:
     """初始化会话管理器"""
-    logger.info("✅ Session manager initialized")
+    global session_manager
+    if session_manager is None:
+        session_manager = SessionManager()
+        logger.info("✅ Session manager initialized")
+
+
+def get_session_manager() -> SessionManager:
+    """获取会话管理器实例"""
+    global session_manager
+    if session_manager is None:
+        init_session_manager()
+    return session_manager
+
+

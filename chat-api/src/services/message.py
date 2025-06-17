@@ -18,7 +18,7 @@ from src.models.message import (
 )
 from src.models.base import PaginationResponse
 from src.ai.service import ai_service
-from src.session.manager import session_manager
+from src.session.manager import get_session_manager
 from src.websocket.manager import websocket_manager
 
 
@@ -27,6 +27,7 @@ class MessageService:
     
     def __init__(self, db: AsyncSession = None):
         self.db = db
+        self.session_manager = get_session_manager()
     
     async def create_message(self, message_data: MessageCreate) -> Message:
         """
@@ -144,7 +145,7 @@ class MessageService:
             
             if not conversation_id and message_data.session_id:
                 # 从会话获取对话ID
-                session = await session_manager.get_session(message_data.session_id)
+                session = await self.session_manager.get_session(message_data.session_id)
                 if session and session.conversation_id:
                     conversation_id = session.conversation_id
                 else:
@@ -170,13 +171,14 @@ class MessageService:
             
             # 更新会话活动时间
             if message_data.session_id:
-                await session_manager.update_activity(message_data.session_id)
+                await self.session_manager.update_activity(message_data.session_id)
             
             # 发送WebSocket通知
             await self._send_websocket_notification(message, message_data.session_id)
             
             # 处理AI回复
             if message_data.session_id:
+                import asyncio
                 asyncio.create_task(self._process_ai_response(
                     message_data.session_id, 
                     conversation_id,
@@ -247,7 +249,7 @@ class MessageService:
         """
         try:
             # 获取会话信息
-            session = await session_manager.get_session(session_id)
+            session = await self.session_manager.get_session(session_id)
             if not session:
                 raise NotFoundException(f"会话不存在: {session_id}")
             
@@ -269,13 +271,21 @@ class MessageService:
     
     async def _create_conversation_for_session(self, session_id: str) -> int:
         """为会话创建对话"""
-        # 这里应该调用对话服务创建对话
-        # conversation_service = ConversationService()
-        # conversation = await conversation_service.create_conversation_for_session(session_id)
-        # return conversation.id
-        
-        # 暂时返回模拟对话ID
-        return 1
+        try:
+            from src.services.conversation import ConversationService
+
+            # 创建对话服务实例
+            conversation_service = ConversationService(self.db)
+
+            # 为会话创建对话
+            conversation = await conversation_service.create_conversation_for_session(session_id)
+
+            logger.info(f"Created conversation {conversation.id} for session {session_id}")
+            return conversation.id
+
+        except Exception as e:
+            logger.error(f"Failed to create conversation for session {session_id}: {e}")
+            raise
     
     async def _send_websocket_notification(
         self, 
@@ -315,7 +325,7 @@ class MessageService:
             import asyncio
             
             # 获取会话信息
-            session = await session_manager.get_session(session_id)
+            session = await self.session_manager.get_session(session_id)
             if not session or session.agent_type.value != "ai":
                 return  # 不是AI会话，跳过
             

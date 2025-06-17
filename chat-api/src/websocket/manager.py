@@ -37,12 +37,24 @@ class Connection:
     async def send_message(self, message: Dict[str, Any]) -> bool:
         """发送消息"""
         try:
-            await self.websocket.send_text(json.dumps(message, ensure_ascii=False))
+            # 使用自定义 JSON 编码器处理 datetime 对象
+            await self.websocket.send_text(json.dumps(message, ensure_ascii=False, default=self._json_encoder))
             self.last_activity = time.time()
             return True
         except Exception as e:
             logger.error(f"Failed to send message to {self.connection_id}: {e}")
             return False
+
+    def _json_encoder(self, obj):
+        """JSON 编码器，处理特殊类型"""
+        from datetime import datetime
+        import uuid
+
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        elif isinstance(obj, uuid.UUID):
+            return str(obj)
+        raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
     
     async def send_response(self, response: WebSocketResponse) -> bool:
         """发送响应"""
@@ -114,7 +126,7 @@ class ConnectionManager:
         if connection.user_id:
             user_connections = self.user_connections.get(connection.user_id, set())
             user_connections.discard(connection_id)
-            if not user_connections:
+            if not user_connections and connection.user_id in self.user_connections:
                 del self.user_connections[connection.user_id]
         
         # 移除连接

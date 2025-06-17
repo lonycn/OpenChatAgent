@@ -162,22 +162,38 @@ setup_environment() {
 # 安装 Python 依赖
 setup_python_env() {
     log_step "设置 Python 环境..."
-    
+
     cd chat-api
-    
+
     # 检查虚拟环境
     if [ ! -d "venv" ]; then
         log_info "创建 Python 虚拟环境..."
         python3 -m venv venv
+        NEED_INSTALL_PYTHON=true
+    else
+        # 检查是否需要重新安装依赖
+        if [ ! -f ".deps_installed" ] || [ "requirements.txt" -nt ".deps_installed" ]; then
+            NEED_INSTALL_PYTHON=true
+        else
+            log_info "Python 依赖已是最新，跳过安装"
+            NEED_INSTALL_PYTHON=false
+        fi
     fi
-    
+
     # 激活虚拟环境
     source venv/bin/activate
-    
-    # 安装依赖
-    log_info "安装 Python 依赖..."
-    pip install -r requirements.txt
-    
+
+    # 安装依赖（仅在需要时）
+    if [ "$NEED_INSTALL_PYTHON" = true ]; then
+        log_info "安装 Python 依赖..."
+        pip install --upgrade pip
+        pip install -r requirements.txt
+
+        # 标记依赖已安装
+        touch .deps_installed
+        log_success "Python 依赖安装完成"
+    fi
+
     cd ..
     log_success "Python 环境设置完成"
 }
@@ -185,23 +201,41 @@ setup_python_env() {
 # 安装 Node.js 依赖
 setup_node_env() {
     log_step "设置 Node.js 环境..."
-    
+
     # 安装 chat-front 依赖
     if [ -d "chat-front" ] && [ -f "chat-front/package.json" ]; then
-        log_info "安装 chat-front 依赖..."
         cd chat-front
-        npm install
+
+        # 检查是否需要安装依赖
+        if [ ! -d "node_modules" ] || [ ! -f ".deps_installed" ] || [ "package.json" -nt ".deps_installed" ]; then
+            log_info "安装 chat-front 依赖..."
+            npm install --legacy-peer-deps
+            touch .deps_installed
+            log_success "chat-front 依赖安装完成"
+        else
+            log_info "chat-front 依赖已是最新，跳过安装"
+        fi
+
         cd ..
     fi
-    
+
     # 安装 chat-admin-ui 依赖
     if [ -d "chat-admin-ui" ] && [ -f "chat-admin-ui/package.json" ]; then
-        log_info "安装 chat-admin-ui 依赖..."
         cd chat-admin-ui
-        npm install --legacy-peer-deps
+
+        # 检查是否需要安装依赖
+        if [ ! -d "node_modules" ] || [ ! -f ".deps_installed" ] || [ "package.json" -nt ".deps_installed" ]; then
+            log_info "安装 chat-admin-ui 依赖..."
+            npm install --legacy-peer-deps
+            touch .deps_installed
+            log_success "chat-admin-ui 依赖安装完成"
+        else
+            log_info "chat-admin-ui 依赖已是最新，跳过安装"
+        fi
+
         cd ..
     fi
-    
+
     log_success "Node.js 环境设置完成"
 }
 
@@ -212,32 +246,40 @@ start_services() {
     # 启动 chat-api (Python FastAPI)
     log_info "启动 chat-api (端口 8000)..."
     cd chat-api
-    # 创建启动脚本以保持虚拟环境
-    cat > start_api.sh << 'EOF'
-#!/bin/bash
-source venv/bin/activate
-python run.py
-EOF
-    chmod +x start_api.sh
-    ./start_api.sh &
+
+    # 使用系统 Python 和已安装的依赖启动
+    if [ -d "venv" ]; then
+        # 使用虚拟环境
+        source venv/bin/activate
+        uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload &
+    else
+        # 使用系统 Python
+        PYTHONPATH=$(pwd)/venv/lib/python*/site-packages:$PYTHONPATH python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload &
+    fi
     API_PID=$!
     cd ..
 
-    sleep 5
+    sleep 8  # 等待 API 启动
 
     # 启动 chat-front (React)
     log_info "启动 chat-front (端口 8001)..."
     cd chat-front
-    npm run dev &
+    npm run dev -- --port 8001 &
     FRONT_PID=$!
     cd ..
 
-    sleep 2
+    sleep 3
 
     # 启动 chat-admin-ui (Ant Design Pro)
     log_info "启动 chat-admin-ui (端口 8006)..."
     cd chat-admin-ui
-    npm run start:dev &
+    if [ -f "package.json" ] && grep -q "start:dev" package.json; then
+        npm run start:dev &
+    elif [ -f "package.json" ] && grep -q "dev" package.json; then
+        npm run dev -- --port 8006 &
+    else
+        npm start &
+    fi
     ADMIN_PID=$!
     cd ..
 

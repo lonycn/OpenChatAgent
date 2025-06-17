@@ -89,7 +89,7 @@ async def _initialize_services():
 
         # 初始化会话管理器
         from src.session.manager import init_session_manager
-        await init_session_manager()
+        init_session_manager()
         logger.info("✅ Session manager initialized")
 
         # 初始化 WebSocket 管理器

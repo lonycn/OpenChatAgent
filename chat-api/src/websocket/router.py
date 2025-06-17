@@ -50,8 +50,8 @@ async def websocket_endpoint(websocket: WebSocket):
             }
         )
         await websocket_manager.send_to_connection(
-            connection_id, 
-            welcome_message.model_dump()
+            connection_id,
+            welcome_message.model_dump(mode='json')
         )
         
         # 消息处理循环
@@ -221,11 +221,16 @@ async def handle_chat_message(connection_id: str, message_data: Dict[str, Any]):
 
         # 如果没有会话ID，创建一个新的会话
         if not session_id:
-            from src.session.manager import session_manager
-            session_id = await session_manager.create_session(
+            from src.session.manager import get_session_manager
+            from src.models.session import SessionCreate
+
+            session_manager = get_session_manager()
+            session_create = SessionCreate(
                 user_id=connection.user_id or "anonymous",
-                metadata={"connection_id": connection_id}
+                session_metadata={"connection_id": connection_id}
             )
+            session = await session_manager.create_session(session_create)
+            session_id = session.session_id
 
         # 确认消息已收到
         confirm_response = WebSocketResponse(
@@ -239,24 +244,27 @@ async def handle_chat_message(connection_id: str, message_data: Dict[str, Any]):
 
         await websocket_manager.send_to_connection(
             connection_id,
-            confirm_response.model_dump()
+            confirm_response.model_dump(mode='json')
         )
 
         # 调用消息服务处理消息并获取AI回复
         from src.services.message import MessageService
         from src.models.message import MessageSend
+        from src.core.database import get_db_session
 
-        message_service = MessageService()
+        # 使用数据库会话上下文管理器
+        async with get_db_session() as db_session:
+            message_service = MessageService(db_session)
 
-        # 构建消息数据
-        message_send = MessageSend(
-            session_id=session_id,
-            content=content,
-            message_type="text"
-        )
+            # 构建消息数据
+            message_send = MessageSend(
+                session_id=session_id,
+                content=content,
+                message_type="text"
+            )
 
-        # 发送消息并触发AI回复
-        await message_service.send_message(message_send)
+            # 发送消息并触发AI回复
+            await message_service.send_message(message_send)
 
     except Exception as e:
         logger.error(f"Chat message error: {e}")

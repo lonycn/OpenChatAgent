@@ -16,7 +16,7 @@ from src.models.session import (
     SessionSwitchAgent, SessionStats, SessionHistory
 )
 from src.models.conversation import AgentType
-from src.session.manager import session_manager
+from src.session.manager import get_session_manager
 
 
 class SessionService:
@@ -24,7 +24,7 @@ class SessionService:
     
     def __init__(self, db: AsyncSession = None):
         self.db = db
-        self.session_manager = session_manager
+        self.session_manager = get_session_manager()
     
     async def create_session(self, session_data: SessionCreate) -> SessionResponse:
         """
