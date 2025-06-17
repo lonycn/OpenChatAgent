@@ -26,7 +26,9 @@
               <el-icon><ChatDotRound /></el-icon>
             </div>
             <div class="stat-info">
-              <div class="stat-value">{{ dashboardStats?.conversations?.total_conversations || 0 }}</div>
+              <div class="stat-value">{{
+                dashboardStats?.conversations?.total_conversations || 0
+              }}</div>
               <div class="stat-label">总会话数</div>
               <div class="stat-change positive">
                 {{ dashboardStats?.conversations?.active_conversations || 0 }} 进行中
@@ -60,7 +62,9 @@
               <el-icon><Star /></el-icon>
             </div>
             <div class="stat-info">
-              <div class="stat-value">{{ (dashboardStats?.performance?.customer_satisfaction || 0).toFixed(1) }}%</div>
+              <div class="stat-value"
+                >{{ (dashboardStats?.performance?.customer_satisfaction || 0).toFixed(1) }}%</div
+              >
               <div class="stat-label">客户满意度</div>
               <div class="stat-change positive">
                 {{ (dashboardStats?.performance?.resolution_rate || 0).toFixed(1) }}% 解决率
@@ -91,28 +95,23 @@
       <el-col :span="12">
         <el-card title="客服工作状态" class="agent-status-card">
           <div class="agent-list" v-loading="agentLoading">
-            <div
-              v-for="agent in agentStats"
-              :key="agent.id"
-              class="agent-item"
-            >
+            <div v-for="agent in agentStats" :key="agent.id" class="agent-item">
               <div class="agent-avatar">
-                <el-badge
-                  :type="getStatusBadgeType(agent.status)"
-                  is-dot
-                >
+                <el-badge :type="getStatusBadgeType(agent.status) as any" is-dot>
                   <el-avatar :src="agent.avatar" :icon="User" size="small" />
                 </el-badge>
               </div>
-              
+
               <div class="agent-info">
                 <div class="agent-name">{{ agent.name }}</div>
                 <div class="agent-meta">
                   <span class="status">{{ getStatusText(agent.status) }}</span>
-                  <span class="conversations">{{ agent.current_conversations }}/{{ agent.max_conversations }} 会话</span>
+                  <span class="conversations"
+                    >{{ agent.current_conversations }}/{{ agent.max_conversations }} 会话</span
+                  >
                 </div>
               </div>
-              
+
               <div class="agent-metrics">
                 <div class="metric">
                   <span class="label">响应时间</span>
@@ -188,17 +187,15 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import { User, ChatDotRound, Message, Star, Clock, TrendCharts } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import {
-  User,
-  ChatDotRound,
-  Message,
-  Star,
-  Clock,
-  TrendCharts
-} from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
-import { getDashboardStats, getAgentStats, getConversationTrends, getRealTimeData } from '@/api/dashboard'
+import {
+  getDashboardStats,
+  getAgentStats,
+  getConversationTrends,
+  getRealTimeData
+} from '@/api/dashboard'
 import type { DashboardStats, AgentInfo, RealTimeData } from '@/api/dashboard/types'
 
 // 响应式数据
@@ -224,7 +221,17 @@ const loadDashboardStats = async () => {
   try {
     const response = await getDashboardStats()
     if (response.success) {
-      dashboardStats.value = response.data
+      dashboardStats.value = {
+        ...response.data,
+        users: {
+          ...response.data.users,
+          online_users: response.data.users?.online_users || 0
+        },
+        conversations: {
+          ...response.data.conversations,
+          total_conversations: response.data.conversations?.total_conversations || 0
+        }
+      }
     }
   } catch (error) {
     console.error('加载仪表板统计失败:', error)
@@ -237,7 +244,12 @@ const loadAgentStats = async () => {
   try {
     const response = await getAgentStats()
     if (response.success) {
-      agentStats.value = response.data
+      agentStats.value = response.data.map((agent: any) => ({
+        ...agent,
+        email: agent.email || '',
+        total_conversations_today: agent.total_conversations_today || 0,
+        status: (agent.status as 'online' | 'offline' | 'busy') || 'offline'
+      }))
     }
   } catch (error) {
     console.error('加载客服状态失败:', error)
@@ -252,7 +264,12 @@ const loadRealtimeData = async () => {
   try {
     const response = await getRealTimeData()
     if (response.success) {
-      realtimeData.value = response.data
+      realtimeData.value = {
+        ...response.data,
+        avg_wait_time: response.data?.avg_wait_time || 0,
+        system_status:
+          (response.data?.system_status as 'healthy' | 'warning' | 'critical') || 'healthy'
+      }
     }
   } catch (error) {
     console.error('加载实时数据失败:', error)
@@ -268,10 +285,10 @@ const initConversationTrendChart = async () => {
     const response = await getConversationTrends({
       granularity: 'day'
     })
-    
+
     if (response.success && trendChartInstance) {
       const { trends } = response.data
-      
+
       const option = {
         title: {
           text: '最近7天会话趋势',
@@ -285,7 +302,7 @@ const initConversationTrendChart = async () => {
         },
         xAxis: {
           type: 'category',
-          data: trends.map(item => new Date(item.timestamp).toLocaleDateString())
+          data: trends?.map((item: any) => new Date(item.timestamp).toLocaleDateString()) || []
         },
         yAxis: {
           type: 'value'
@@ -294,24 +311,24 @@ const initConversationTrendChart = async () => {
           {
             name: '总会话',
             type: 'line',
-            data: trends.map(item => item.total),
+            data: trends?.map((item: any) => item.total) || [],
             smooth: true
           },
           {
             name: 'AI处理',
             type: 'line',
-            data: trends.map(item => item.ai_handled),
+            data: trends?.map((item: any) => item.ai_handled) || [],
             smooth: true
           },
           {
             name: '人工处理',
             type: 'line',
-            data: trends.map(item => item.human_handled),
+            data: trends?.map((item: any) => item.human_handled) || [],
             smooth: true
           }
         ]
       }
-      
+
       trendChartInstance.setOption(option)
     }
   } catch (error) {
@@ -323,7 +340,7 @@ const initAgentTypeChart = () => {
   if (!agentTypeChart.value || !dashboardStats.value) return
 
   const { ai_handled, human_handled } = dashboardStats.value.conversations
-  
+
   const option = {
     title: {
       text: '处理方式分布',
@@ -350,7 +367,7 @@ const initAgentTypeChart = () => {
       }
     ]
   }
-  
+
   if (agentTypeChartInstance) {
     agentTypeChartInstance.setOption(option)
   }
@@ -412,11 +429,7 @@ onMounted(async () => {
   }
 
   // 加载数据
-  await Promise.all([
-    loadDashboardStats(),
-    loadAgentStats(),
-    loadRealtimeData()
-  ])
+  await Promise.all([loadDashboardStats(), loadAgentStats(), loadRealtimeData()])
 
   // 初始化图表
   await initConversationTrendChart()

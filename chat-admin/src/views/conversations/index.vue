@@ -37,34 +37,31 @@
             @click="selectConversation(conversation)"
           >
             <div class="conversation-avatar">
-              <el-badge :value="conversation.unread_count" :hidden="conversation.unread_count === 0">
+              <el-badge
+                :value="conversation.unread_count"
+                :hidden="conversation.unread_count === 0"
+              >
                 <el-avatar :src="conversation.customer.avatar" :icon="User" />
               </el-badge>
             </div>
-            
+
             <div class="conversation-content">
               <div class="conversation-header">
                 <span class="customer-name">{{ conversation.customer.name }}</span>
                 <div class="conversation-meta">
-                  <el-tag
-                    :type="getStatusType(conversation.status)"
-                    size="small"
-                  >
+                  <el-tag :type="getStatusType(conversation.status) as any" size="small">
                     {{ getStatusText(conversation.status) }}
                   </el-tag>
-                  <el-tag
-                    :type="getPriorityType(conversation.priority)"
-                    size="small"
-                  >
+                  <el-tag :type="getPriorityType(conversation.priority) as any" size="small">
                     {{ getPriorityText(conversation.priority) }}
                   </el-tag>
                 </div>
               </div>
-              
+
               <div class="last-message">
                 {{ conversation.last_message?.content || '暂无消息' }}
               </div>
-              
+
               <div class="conversation-footer">
                 <span class="source-icon">
                   <component :is="getSourceIcon(conversation.customer.source)" />
@@ -80,7 +77,7 @@
 
             <div class="conversation-actions">
               <el-dropdown @command="handleConversationAction">
-                <el-button type="text" :icon="MoreFilled" />
+                <el-button link :icon="MoreFilled" />
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item :command="{ action: 'assign', id: conversation.id }">
@@ -114,12 +111,12 @@
                 <h4>{{ selectedConversation.customer.name }}</h4>
                 <span class="customer-meta">
                   <component :is="getSourceIcon(selectedConversation.customer.source)" />
-                  {{ selectedConversation.customer.source }} ·
-                  活跃于 {{ formatTime(selectedConversation.updated_at) }}
+                  {{ selectedConversation.customer.source }} · 活跃于
+                  {{ formatTime(selectedConversation.updated_at) }}
                 </span>
               </div>
             </div>
-            
+
             <div class="chat-actions">
               <el-tag
                 :type="selectedConversation.current_agent_type === 'ai' ? 'info' : 'success'"
@@ -130,7 +127,10 @@
               </el-tag>
 
               <el-button
-                v-if="selectedConversation.current_agent_type === 'ai' && selectedConversation.status === 'open'"
+                v-if="
+                  selectedConversation.current_agent_type === 'ai' &&
+                  selectedConversation.status === 'open'
+                "
                 type="success"
                 size="small"
                 @click="handleTakeOver"
@@ -139,7 +139,10 @@
               </el-button>
 
               <el-button
-                v-if="selectedConversation.current_agent_type === 'human' && selectedConversation.status === 'open'"
+                v-if="
+                  selectedConversation.current_agent_type === 'human' &&
+                  selectedConversation.status === 'open'
+                "
                 type="warning"
                 size="small"
                 @click="handleSwitchToAI"
@@ -147,22 +150,27 @@
                 切换AI
               </el-button>
 
-              <el-button :icon="Star" type="text">收藏</el-button>
+              <el-button :icon="Star" link>收藏</el-button>
               <el-button :icon="Check" type="primary" @click="handleResolve">解决</el-button>
               <el-dropdown @command="handleConversationAction">
-                <el-button :icon="MoreFilled" type="text" />
+                <el-button :icon="MoreFilled" link />
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item :command="{ action: 'assign', id: selectedConversation.id }">
                       分配客服
                     </el-dropdown-item>
-                    <el-dropdown-item :command="{ action: 'priority', id: selectedConversation.id }">
+                    <el-dropdown-item
+                      :command="{ action: 'priority', id: selectedConversation.id }"
+                    >
                       设置优先级
                     </el-dropdown-item>
                     <el-dropdown-item :command="{ action: 'notes', id: selectedConversation.id }">
                       添加备注
                     </el-dropdown-item>
-                    <el-dropdown-item divided :command="{ action: 'close', id: selectedConversation.id }">
+                    <el-dropdown-item
+                      divided
+                      :command="{ action: 'close', id: selectedConversation.id }"
+                    >
                       关闭会话
                     </el-dropdown-item>
                   </el-dropdown-menu>
@@ -182,7 +190,7 @@
               <div v-if="message.sender_type === 'customer'" class="message-avatar">
                 <el-avatar :src="selectedConversation.customer.avatar" :icon="User" size="small" />
               </div>
-              
+
               <div class="message-content">
                 <div class="message-bubble">
                   {{ message.content }}
@@ -191,9 +199,13 @@
                   {{ formatTime(message.created_at) }}
                 </div>
               </div>
-              
+
               <div v-if="message.sender_type === 'agent'" class="message-avatar">
-                <el-avatar :src="selectedConversation.assigned_agent?.avatar" :icon="User" size="small" />
+                <el-avatar
+                  :src="selectedConversation.assigned_agent?.avatar"
+                  :icon="User"
+                  size="small"
+                />
               </div>
             </div>
           </div>
@@ -233,12 +245,7 @@
               >
                 发送
               </el-button>
-              <el-button
-                type="default"
-                @click="showQuickReplyDialog = true"
-              >
-                模板
-              </el-button>
+              <el-button type="default" @click="showQuickReplyDialog = true"> 模板 </el-button>
             </div>
           </div>
         </div>
@@ -256,9 +263,12 @@
               <div class="profile-header">
                 <el-avatar :src="selectedConversation.customer.avatar" :icon="User" :size="64" />
                 <h4>{{ selectedConversation.customer.name }}</h4>
-                <p>{{ selectedConversation.customer.custom_attributes?.title }} at {{ selectedConversation.customer.custom_attributes?.company }}</p>
+                <p
+                  >{{ selectedConversation.customer.custom_attributes?.title }} at
+                  {{ selectedConversation.customer.custom_attributes?.company }}</p
+                >
               </div>
-              
+
               <div class="profile-details">
                 <div class="detail-item">
                   <span class="label">邮箱:</span>
@@ -279,7 +289,7 @@
               </div>
             </div>
           </el-tab-pane>
-          
+
           <el-tab-pane label="会话历史" name="history">
             <div class="conversation-history">
               <!-- 会话历史内容 -->
@@ -290,11 +300,7 @@
     </el-container>
 
     <!-- 快速回复模板对话框 -->
-    <el-dialog
-      v-model="showQuickReplyDialog"
-      title="选择回复模板"
-      width="600px"
-    >
+    <el-dialog v-model="showQuickReplyDialog" title="选择回复模板" width="600px">
       <div class="template-list">
         <div
           v-for="template in replyTemplates"
@@ -315,11 +321,7 @@
     </el-dialog>
 
     <!-- 分配客服对话框 -->
-    <el-dialog
-      v-model="showAssignDialog"
-      title="分配客服"
-      width="400px"
-    >
+    <el-dialog v-model="showAssignDialog" title="分配客服" width="400px">
       <el-form>
         <el-form-item label="选择客服">
           <el-select v-model="selectedAgent" placeholder="请选择客服">
@@ -387,9 +389,17 @@ const quickReplies = ref([
 const replyTemplates = ref([
   { id: 1, title: '欢迎语', content: '您好！欢迎咨询，我是您的专属客服，很高兴为您服务。' },
   { id: 2, title: '查询中', content: '我正在为您查询相关信息，请稍等片刻...' },
-  { id: 3, title: '问题解决', content: '您的问题已经得到解决，感谢您的耐心等待。如有其他问题，请随时联系我们。' },
+  {
+    id: 3,
+    title: '问题解决',
+    content: '您的问题已经得到解决，感谢您的耐心等待。如有其他问题，请随时联系我们。'
+  },
   { id: 4, title: '转接说明', content: '根据您的问题，我将为您转接到专业部门，请稍候。' },
-  { id: 5, title: '结束语', content: '感谢您的咨询，祝您生活愉快！如有其他问题，欢迎随时联系我们。' }
+  {
+    id: 5,
+    title: '结束语',
+    content: '感谢您的咨询，祝您生活愉快！如有其他问题，欢迎随时联系我们。'
+  }
 ])
 
 // 可用客服列表
@@ -409,8 +419,9 @@ const queryParams = reactive<ConversationListParams>({
 
 // 计算属性
 const filteredConversations = computed(() => {
-  return conversations.value.filter(conv => {
-    const matchesSearch = !searchText.value ||
+  return conversations.value.filter((conv) => {
+    const matchesSearch =
+      !searchText.value ||
       conv.customer.name.toLowerCase().includes(searchText.value.toLowerCase()) ||
       (conv.last_message?.content || '').toLowerCase().includes(searchText.value.toLowerCase())
 
@@ -425,7 +436,7 @@ const loadConversations = async () => {
   loading.value = true
   try {
     const response = await getConversationList(queryParams)
-    if (response.success) {
+    if ((response as any)?.success) {
       conversations.value = response.data.conversations
       if (conversations.value.length > 0 && !selectedConversation.value) {
         await selectConversation(conversations.value[0])
@@ -447,7 +458,7 @@ const selectConversation = async (conversation: Conversation) => {
 const loadMessages = async (conversationId: string) => {
   try {
     const response = await getConversationMessages(conversationId)
-    if (response.success) {
+    if ((response as any)?.success) {
       messages.value = response.data.messages
       await nextTick()
       scrollToBottom()
@@ -467,7 +478,7 @@ const handleSendMessage = async () => {
       message_type: 'text'
     })
 
-    if (response.success) {
+    if ((response as any)?.success) {
       messageInput.value = ''
       await loadMessages(selectedConversation.value.id)
       ElMessage.success('消息发送成功')
@@ -587,7 +598,7 @@ const handleAssignAgent = async () => {
 
   try {
     // TODO: 调用分配客服API
-    const agent = availableAgents.value.find(a => a.id === selectedAgent.value)
+    const agent = availableAgents.value.find((a) => a.id === selectedAgent.value)
     if (agent) {
       ElMessage.success(`已将会话分配给 ${agent.name}`)
       showAssignDialog.value = false

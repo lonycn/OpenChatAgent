@@ -1,4 +1,3 @@
-import { TableProps as ElTableProps } from 'element-plus'
 export interface TableColumn {
   field: string
   label?: string

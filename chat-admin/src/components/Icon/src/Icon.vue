@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, unref } from 'vue'
-import { ElIcon } from 'element-plus'
 import { propTypes } from '@/utils/propTypes'
 import { useDesign } from '@/hooks/web/useDesign'
 import { Icon } from '@iconify/vue'

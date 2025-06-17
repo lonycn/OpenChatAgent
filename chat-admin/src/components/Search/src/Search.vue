@@ -8,7 +8,6 @@ import { cloneDeep, set } from 'lodash-es'
 import { initModel } from '@/components/Form/src/helper'
 import ActionButton from './components/ActionButton.vue'
 import { SearchProps } from './types'
-import { FormItemProp } from 'element-plus'
 import { isObject, isEmptyVal } from '@/utils/is'
 
 const props = defineProps({

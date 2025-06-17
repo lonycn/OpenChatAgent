@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ContentWrap } from '@/components/ContentWrap'
 import { ref, unref } from 'vue'
-import { ElDivider, ElImage, ElTag, ElTabPane, ElTabs, ElButton, ElMessage } from 'element-plus'
 import defaultAvatar from '@/assets/imgs/avatar.jpg'
 import UploadAvatar from './components/UploadAvatar.vue'
 import { Dialog } from '@/components/Dialog'

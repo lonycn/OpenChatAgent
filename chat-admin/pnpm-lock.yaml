@@ -5,6 +5,9 @@ settings:
   excludeLinksFromLockfile: false
 
 dependencies:
+  '@element-plus/icons-vue':
+    specifier: ^2.3.1
+    version: 2.3.1(vue@3.5.13)
   '@iconify/iconify':
     specifier: ^3.1.1
     version: 3.1.1

@@ -1,5 +1,4 @@
 import { AxiosResponse, InternalAxiosRequestConfig } from './types'
-import { ElMessage } from 'element-plus'
 import qs from 'qs'
 import { SUCCESS_CODE, TRANSFORM_REQUEST_DATA } from '@/constants'
 import { useUserStoreWithOut } from '@/store/modules/user'

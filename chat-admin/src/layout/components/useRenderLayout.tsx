@@ -6,7 +6,6 @@ import { TagsView } from '@/components/TagsView'
 import { Logo } from '@/components/Logo'
 import AppView from './AppView.vue'
 import ToolHeader from './ToolHeader.vue'
-import { ElScrollbar } from 'element-plus'
 import { useDesign } from '@/hooks/web/useDesign'
 
 const { getPrefixCls } = useDesign()

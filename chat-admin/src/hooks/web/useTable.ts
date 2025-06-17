@@ -1,6 +1,5 @@
 import { useI18n } from '@/hooks/web/useI18n'
 import { Table, TableExpose, TableProps, TableSetProps, TableColumn } from '@/components/Table'
-import { ElTable, ElMessageBox, ElMessage } from 'element-plus'
 import { ref, watch, unref, nextTick, onMounted } from 'vue'
 
 const { t } = useI18n()

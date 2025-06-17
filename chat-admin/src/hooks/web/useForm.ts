@@ -1,5 +1,4 @@
 import type { Form, FormExpose } from '@/components/Form'
-import type { ElForm, ElFormItem } from 'element-plus'
 import { ref, unref, nextTick } from 'vue'
 import { FormSchema, FormSetProps, FormProps } from '@/components/Form'
 import { isEmptyVal, isObject } from '@/utils/is'

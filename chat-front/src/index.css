@@ -163,6 +163,34 @@ p {
   body {
     font-size: 14px;
   }
+  
+  /* 移动端全屏显示 */
+  .App {
+    padding: 0 !important;
+    background-color: transparent !important;
+  }
+  
+  .chat-container-wrapper {
+    max-width: none !important;
+    max-height: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    height: 100vh !important;
+  }
+}
+
+/* PC端样式 */
+@media (min-width: 769px) {
+  .App {
+    padding: 20px;
+  }
+  
+  .chat-container-wrapper {
+    min-height: 600px;
+    height: 80vh !important;
+    max-height: 800px;
+    max-width: 900px;
+  }
 }
 
 /* Ant Design X 组件样式覆盖 */
@@ -199,4 +227,4 @@ p {
   padding: 16px;
   border-top: 1px solid #f0f0f0;
   background-color: #fff;
-} 
+}

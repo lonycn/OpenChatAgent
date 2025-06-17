@@ -1,7 +1,6 @@
 <script setup lang="tsx">
 import { ContentWrap } from '@/components/ContentWrap'
 import { ref, unref } from 'vue'
-import { ElDivider, ElRow, ElCol } from 'element-plus'
 import { hasPermi } from '@/components/Permission'
 
 const permission = ref('add')

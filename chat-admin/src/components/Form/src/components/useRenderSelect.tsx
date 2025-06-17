@@ -1,4 +1,3 @@
-import { ElOption, ElOptionGroup } from 'element-plus'
 import { FormSchema, SelectComponentProps, SelectOption } from '../types'
 
 export const useRenderSelect = () => {

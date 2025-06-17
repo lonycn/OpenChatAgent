@@ -87,6 +87,10 @@ export const usePermissionStore = defineStore('permission', {
       storage: localStorage
     },
     {
+      pick: ['isAddRouters'],
+      storage: localStorage
+    },
+    {
       pick: ['menuTabRouters'],
       storage: localStorage
     }

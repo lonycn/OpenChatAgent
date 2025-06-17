@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { VideoPlayer, createVideoViewer } from '@/components/VideoPlayer'
 import { ContentWrap } from '@/components/ContentWrap'
-import { ElDivider } from 'element-plus'
 
 const showVideo = () => {
   createVideoViewer({

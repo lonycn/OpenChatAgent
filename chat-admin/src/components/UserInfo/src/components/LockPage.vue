@@ -1,6 +1,5 @@
 <script lang="ts" setup>
 import { ref } from 'vue'
-import { ElInput } from 'element-plus'
 import { resetRouter } from '@/router'
 import { useRouter } from 'vue-router'
 import { useStorage } from '@/hooks/web/useStorage'

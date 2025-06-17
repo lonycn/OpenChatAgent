@@ -2,11 +2,11 @@
  * 用户管理 API
  */
 import request from '@/axios'
-import type { 
-  UserListParams, 
-  UserListResponse, 
-  UserResponse, 
-  CreateUserParams, 
+import type {
+  UserListParams,
+  UserListResponse,
+  UserResponse,
+  CreateUserParams,
   UpdateUserParams,
   ChangePasswordParams,
   UserStatsResponse

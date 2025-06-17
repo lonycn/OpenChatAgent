@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useAppStore } from '@/store/modules/app'
-import { ElSwitch } from 'element-plus'
 import { useIcon } from '@/hooks/web/useIcon'
 import { useDesign } from '@/hooks/web/useDesign'
 import { getCssVar } from '@/utils'

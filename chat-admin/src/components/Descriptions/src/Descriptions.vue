@@ -1,5 +1,4 @@
 <script lang="tsx">
-import { ElCollapseTransition, ElTooltip, ElRow, ElCol } from 'element-plus'
 import { useDesign } from '@/hooks/web/useDesign'
 import { propTypes } from '@/utils/propTypes'
 import { ref, unref, PropType, computed, defineComponent } from 'vue'

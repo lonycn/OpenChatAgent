@@ -3,7 +3,6 @@ import { FormSchema, Form } from '@/components/Form'
 import { useForm } from '@/hooks/web/useForm'
 import { useValidator } from '@/hooks/web/useValidator'
 import { reactive, ref, watch } from 'vue'
-import { ElDivider, ElMessage, ElMessageBox } from 'element-plus'
 
 const props = defineProps({
   userInfo: {

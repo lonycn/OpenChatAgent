@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ContentWrap } from '@/components/ContentWrap'
 import { useClipboard } from '@/hooks/web/useClipboard'
-import { ElInput } from 'element-plus'
 import { ref } from 'vue'
 
 const { copy, copied, text, isSupported } = useClipboard()

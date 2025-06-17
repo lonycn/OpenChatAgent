@@ -1,5 +1,4 @@
 import { FormSchema, ComponentNameEnum, CheckboxGroupComponentProps } from '../types'
-import { ElCheckbox, ElCheckboxButton } from 'element-plus'
 import { defineComponent } from 'vue'
 
 export const useRenderCheckbox = () => {

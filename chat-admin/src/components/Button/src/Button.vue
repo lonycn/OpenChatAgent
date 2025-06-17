@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { useDesign } from '@/hooks/web/useDesign'
-import { ElButton, ComponentSize, ButtonType } from 'element-plus'
 import { PropType, Component, computed, unref } from 'vue'
 import { useAppStore } from '@/store/modules/app'
 

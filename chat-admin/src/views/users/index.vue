@@ -8,9 +8,7 @@
           <p>管理系统用户和权限</p>
         </div>
         <div class="header-right">
-          <el-button type="primary" :icon="Plus" @click="handleCreateUser">
-            新增用户
-          </el-button>
+          <el-button type="primary" :icon="Plus" @click="handleCreateUser"> 新增用户 </el-button>
         </div>
       </div>
 
@@ -52,20 +50,13 @@
             </el-select>
           </el-col>
           <el-col :span="4">
-            <el-button type="primary" :icon="Search" @click="loadUsers">
-              搜索
-            </el-button>
+            <el-button type="primary" :icon="Search" @click="loadUsers"> 搜索 </el-button>
           </el-col>
         </el-row>
       </div>
 
       <!-- 用户表格 -->
-      <el-table
-        :data="users"
-        v-loading="loading"
-        stripe
-        style="width: 100%"
-      >
+      <el-table :data="users" v-loading="loading" stripe style="width: 100%">
         <el-table-column prop="avatar" label="头像" width="80">
           <template #default="{ row }">
             <el-avatar :src="row.avatar" :icon="User" size="small" />
@@ -79,8 +70,6 @@
             {{ row.full_name || row.name }}
           </template>
         </el-table-column>
-
-
 
         <el-table-column prop="role" label="角色" width="100">
           <template #default="{ row }">
@@ -112,37 +101,21 @@
 
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button
-              type="text"
-              size="small"
-              :icon="Edit"
-              @click="handleEditUser(row)"
-            >
+            <el-button link size="small" :icon="Edit" @click="handleEditUser(row)">
               编辑
             </el-button>
-            <el-button
-              type="text"
-              size="small"
-              :icon="Key"
-              @click="handleResetPassword(row)"
-            >
+            <el-button link size="small" :icon="Key" @click="handleResetPassword(row)">
               重置密码
             </el-button>
             <el-dropdown @command="(command) => handleUserAction(command, row)">
-              <el-button type="text" size="small" :icon="MoreFilled" />
+              <el-button link size="small" :icon="MoreFilled" />
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="permissions">
-                    权限管理
-                  </el-dropdown-item>
-                  <el-dropdown-item
-                    :command="row.status === 'active' ? 'disable' : 'enable'"
-                  >
+                  <el-dropdown-item command="permissions"> 权限管理 </el-dropdown-item>
+                  <el-dropdown-item :command="row.status === 'active' ? 'disable' : 'enable'">
                     {{ row.status === 'active' ? '禁用用户' : '启用用户' }}
                   </el-dropdown-item>
-                  <el-dropdown-item divided command="delete">
-                    删除用户
-                  </el-dropdown-item>
+                  <el-dropdown-item divided command="delete"> 删除用户 </el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -171,18 +144,9 @@
       width="600px"
       @close="resetUserForm"
     >
-      <el-form
-        ref="userFormRef"
-        :model="userForm"
-        :rules="userFormRules"
-        label-width="80px"
-      >
+      <el-form ref="userFormRef" :model="userForm" :rules="userFormRules" label-width="80px">
         <el-form-item label="邮箱" prop="email">
-          <el-input
-            v-model="userForm.email"
-            :disabled="isEditMode"
-            placeholder="请输入邮箱"
-          />
+          <el-input v-model="userForm.email" :disabled="isEditMode" placeholder="请输入邮箱" />
         </el-form-item>
 
         <el-form-item label="姓名" prop="full_name">
@@ -216,22 +180,14 @@
 
       <template #footer>
         <el-button @click="userDialogVisible = false">取消</el-button>
-        <el-button
-          type="primary"
-          :loading="submitting"
-          @click="handleSubmitUser"
-        >
+        <el-button type="primary" :loading="submitting" @click="handleSubmitUser">
           {{ isEditMode ? '更新' : '创建' }}
         </el-button>
       </template>
     </el-dialog>
 
     <!-- 重置密码对话框 -->
-    <el-dialog
-      v-model="passwordDialogVisible"
-      title="重置密码"
-      width="400px"
-    >
+    <el-dialog v-model="passwordDialogVisible" title="重置密码" width="400px">
       <el-form
         ref="passwordFormRef"
         :model="passwordForm"
@@ -259,11 +215,7 @@
 
       <template #footer>
         <el-button @click="passwordDialogVisible = false">取消</el-button>
-        <el-button
-          type="primary"
-          :loading="submitting"
-          @click="handleSubmitPassword"
-        >
+        <el-button type="primary" :loading="submitting" @click="handleSubmitPassword">
           重置密码
         </el-button>
       </template>
@@ -274,14 +226,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import {
-  Plus,
-  Search,
-  Edit,
-  Key,
-  MoreFilled,
-  User
-} from '@element-plus/icons-vue'
+import { Plus, Search, Edit, Key, MoreFilled, User } from '@element-plus/icons-vue'
 import {
   getUserList,
   createUser,
@@ -290,7 +235,14 @@ import {
   updateUserStatus,
   resetUserPassword
 } from '@/api/users'
-import type { User as UserType, UserListParams, CreateUserParams, UpdateUserParams } from '@/api/users/types'
+import type {
+  User as UserType,
+  UserListParams,
+  CreateUserParams,
+  UpdateUserParams,
+  UserRole,
+  UserStatus
+} from '@/api/users/types'
 import dayjs from 'dayjs'
 
 // 响应式数据
@@ -343,15 +295,9 @@ const userFormRules: FormRules = {
     { required: true, message: '请输入邮箱', trigger: 'blur' },
     { type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' }
   ],
-  full_name: [
-    { required: true, message: '请输入姓名', trigger: 'blur' }
-  ],
-  role: [
-    { required: true, message: '请选择角色', trigger: 'change' }
-  ],
-  status: [
-    { required: true, message: '请选择状态', trigger: 'change' }
-  ],
+  full_name: [{ required: true, message: '请输入姓名', trigger: 'blur' }],
+  role: [{ required: true, message: '请选择角色', trigger: 'change' }],
+  status: [{ required: true, message: '请选择状态', trigger: 'change' }],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
     { min: 8, message: '密码长度不能少于 8 个字符', trigger: 'blur' }
@@ -389,9 +335,12 @@ const loadUsers = async () => {
     }
 
     const response = await getUserList(params)
-    if (response.success) {
+    if ((response as any)?.success) {
       users.value = response.data.users
       pagination.total = response.data.total
+      pagination.totalPages = response.data.total_pages
+    } else {
+      ElMessage.error((response as any)?.message || '获取用户列表失败')
     }
   } catch (error) {
     console.error('加载用户列表失败:', error)
@@ -459,10 +408,13 @@ const handleSubmitUser = async () => {
       }
 
       const response = await updateUser(currentUser.value.id, updateData)
-      if (response.success) {
+      if ((response as any)?.success) {
         ElMessage.success('用户更新成功')
         userDialogVisible.value = false
+        resetUserForm()
         await loadUsers()
+      } else {
+        ElMessage.error((response as any)?.message || '更新用户失败')
       }
     } else {
       // 创建用户
@@ -475,10 +427,13 @@ const handleSubmitUser = async () => {
       }
 
       const response = await createUser(createData)
-      if (response.success) {
+      if ((response as any)?.success) {
         ElMessage.success('用户创建成功')
         userDialogVisible.value = false
+        resetUserForm()
         await loadUsers()
+      } else {
+        ElMessage.error((response as any)?.message || '创建用户失败')
       }
     }
   } catch (error) {
@@ -504,9 +459,11 @@ const handleSubmitPassword = async () => {
     submitting.value = true
 
     const response = await resetUserPassword(currentUser.value.id, passwordForm.newPassword)
-    if (response.success) {
+    if ((response as any)?.success) {
       ElMessage.success('密码重置成功')
       passwordDialogVisible.value = false
+    } else {
+      ElMessage.error((response as any)?.message || '重置密码失败')
     }
   } catch (error) {
     console.error('重置密码失败:', error)
@@ -527,9 +484,11 @@ const handleUserAction = async (command: string, user: UserType) => {
       try {
         const newStatus = command === 'enable' ? 'active' : 'inactive'
         const response = await updateUserStatus(user.id, newStatus)
-        if (response.success) {
-          ElMessage.success(`用户${command === 'enable' ? '启用' : '禁用'}成功`)
+        if ((response as any)?.success) {
+          ElMessage.success(`用户状态已${newStatus === 'active' ? '激活' : '禁用'}`)
           await loadUsers()
+        } else {
+          ElMessage.error((response as any)?.message || '更新用户状态失败')
         }
       } catch (error) {
         console.error('更新用户状态失败:', error)
@@ -550,9 +509,11 @@ const handleUserAction = async (command: string, user: UserType) => {
         )
 
         const response = await deleteUser(user.id)
-        if (response.success) {
+        if ((response as any)?.success) {
           ElMessage.success('用户删除成功')
           await loadUsers()
+        } else {
+          ElMessage.error((response as any)?.message || '删除用户失败')
         }
       } catch (error) {
         if (error !== 'cancel') {

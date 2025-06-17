@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { ComponentSize, ElAvatar, ElTooltip } from 'element-plus'
 import { PropType, computed } from 'vue'
 import { AvatarItem } from './types'
 import { useDesign } from '@/hooks/web/useDesign'

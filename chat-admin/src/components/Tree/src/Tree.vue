@@ -1,6 +1,5 @@
 <script lang="tsx" setup>
 import { defineProps, defineEmits, ref, CSSProperties } from 'vue'
-import { ElTree } from 'element-plus'
 
 interface TreeProps {
   data: any[]

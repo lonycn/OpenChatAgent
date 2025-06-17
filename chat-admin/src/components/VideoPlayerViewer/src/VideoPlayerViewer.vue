@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { VideoPlayer } from '@/components/VideoPlayer'
-import { ElOverlay } from 'element-plus'
 import { ref, nextTick } from 'vue'
 import { Icon } from '@/components/Icon'
 

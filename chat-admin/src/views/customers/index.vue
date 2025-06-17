@@ -52,7 +52,7 @@
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="55" />
-        
+
         <el-table-column label="客户信息" width="250">
           <template #default="{ row }">
             <div class="customer-info">
@@ -114,18 +114,10 @@
 
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button
-              type="primary"
-              size="small"
-              @click="handleViewConversations(row)"
-            >
+            <el-button type="primary" size="small" @click="handleViewConversations(row)">
               查看会话
             </el-button>
-            <el-button
-              type="success"
-              size="small"
-              @click="handleStartConversation(row)"
-            >
+            <el-button type="success" size="small" @click="handleStartConversation(row)">
               发起会话
             </el-button>
             <el-dropdown @command="(command) => handleMoreAction(command, row)">
@@ -164,11 +156,7 @@
       :title="isEditMode ? '编辑客户信息' : '客户详情'"
       width="600px"
     >
-      <el-form
-        v-if="currentCustomer"
-        :model="customerForm"
-        label-width="100px"
-      >
+      <el-form v-if="currentCustomer" :model="customerForm" label-width="100px">
         <el-form-item label="客户姓名">
           <el-input v-model="customerForm.name" :disabled="!isEditMode" />
         </el-form-item>
@@ -188,20 +176,16 @@
             type="textarea"
             :rows="3"
             :disabled="!isEditMode"
-            placeholder="JSON格式，如: {&quot;company&quot;: &quot;公司名&quot;, &quot;phone&quot;: &quot;电话&quot;}"
+            placeholder='JSON格式，如: {"company": "公司名", "phone": "电话"}'
           />
         </el-form-item>
       </el-form>
-      
+
       <template #footer>
         <span class="dialog-footer">
           <el-button @click="customerDialogVisible = false">取消</el-button>
-          <el-button v-if="isEditMode" type="primary" @click="handleSaveCustomer">
-            保存
-          </el-button>
-          <el-button v-else type="primary" @click="isEditMode = true">
-            编辑
-          </el-button>
+          <el-button v-if="isEditMode" type="primary" @click="handleSaveCustomer"> 保存 </el-button>
+          <el-button v-else type="primary" @click="isEditMode = true"> 编辑 </el-button>
         </span>
       </template>
     </el-dialog>
@@ -210,10 +194,10 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Refresh, ArrowDown } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { getCustomerList, updateCustomer } from '@/api/customers'
-import type { Customer, CustomerListParams } from '@/api/customers/types'
+import type { Customer, CustomerListParams, UpdateCustomerParams, CustomerSource } from '@/api/customers/types'
 import { formatDateTime } from '@/utils/date'
 
 // 响应式数据
@@ -355,21 +339,21 @@ const handleEditCustomer = (customer: Customer) => {
 // 保存客户信息
 const handleSaveCustomer = async () => {
   if (!currentCustomer.value) return
-  
+
   try {
     // 解析自定义属性
     let customAttributes = {}
     if (customAttributesText.value.trim()) {
       customAttributes = JSON.parse(customAttributesText.value)
     }
-    
-    const updateData = {
+
+    const updateData: UpdateCustomerParams = {
       name: customerForm.name,
       email: customerForm.email,
-      source: customerForm.source,
+      source: customerForm.source as CustomerSource,
       custom_attributes: customAttributes
     }
-    
+
     const response = await updateCustomer(currentCustomer.value.id, updateData)
     if (response.success) {
       ElMessage.success('客户信息更新成功')
@@ -385,16 +369,12 @@ const handleSaveCustomer = async () => {
 // 拉黑客户
 const handleBlockCustomer = async (customer: Customer) => {
   try {
-    await ElMessageBox.confirm(
-      `确定要拉黑客户 ${customer.name} 吗？`,
-      '确认操作',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }
-    )
-    
+    await ElMessageBox.confirm(`确定要拉黑客户 ${customer.name} 吗？`, '确认操作', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+
     // TODO: 实现拉黑逻辑
     ElMessage.success(`客户 ${customer.name} 已被拉黑`)
     loadCustomers()
@@ -404,13 +384,13 @@ const handleBlockCustomer = async (customer: Customer) => {
 }
 
 // 获取来源标签类型
-const getSourceTagType = (source: string) => {
-  const typeMap: Record<string, string> = {
+const getSourceTagType = (source: string): 'primary' | 'success' | 'info' | 'warning' | 'danger' => {
+  const typeMap: Record<string, 'primary' | 'success' | 'info' | 'warning' | 'danger'> = {
     website: 'primary',
     mobile: 'success',
     api: 'info'
   }
-  return typeMap[source] || 'default'
+  return typeMap[source] || 'info'
 }
 
 // 获取来源文本

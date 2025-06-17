@@ -7,7 +7,6 @@ import { underlineToHump } from '@/utils'
 import { useAppStore } from '@/store/modules/app'
 import { useDesign } from '@/hooks/web/useDesign'
 import { ref } from 'vue'
-import { ElScrollbar } from 'element-plus'
 
 const { getPrefixCls } = useDesign()
 

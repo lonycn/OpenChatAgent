@@ -4,7 +4,6 @@ import { useI18n } from '@/hooks/web/useI18n'
 import { Table, TableColumn } from '@/components/Table'
 import { getTreeTableListApi } from '@/api/table'
 import { reactive, unref } from 'vue'
-import { ElTag } from 'element-plus'
 import { useTable } from '@/hooks/web/useTable'
 import { BaseButton } from '@/components/Button'
 

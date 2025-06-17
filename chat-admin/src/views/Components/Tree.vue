@@ -3,7 +3,6 @@ import { Icon } from '@/components/Icon'
 import { Tree } from '@/components/Tree'
 import { ContentWrap } from '@/components/ContentWrap'
 import { useI18n } from 'vue-i18n'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import { ref } from 'vue'
 
 const { t } = useI18n()

@@ -2,7 +2,6 @@
 import { ContentWrap } from '@/components/ContentWrap'
 import { ImageCropping } from '@/components/ImageCropping'
 import { ref, unref } from 'vue'
-import { ElInput, ElDivider } from 'element-plus'
 
 const cropperExpose = ref<InstanceType<typeof ImageCropping>>()
 

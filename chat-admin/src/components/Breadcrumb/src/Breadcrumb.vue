@@ -1,5 +1,4 @@
 <script lang="tsx">
-import { ElBreadcrumb, ElBreadcrumbItem } from 'element-plus'
 import { ref, watch, computed, unref, defineComponent, TransitionGroup } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePermissionStore } from '@/store/modules/permission'

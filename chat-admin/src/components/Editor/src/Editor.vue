@@ -4,7 +4,6 @@ import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
 import { IDomEditor, IEditorConfig, i18nChangeLanguage } from '@wangeditor/editor'
 import { propTypes } from '@/utils/propTypes'
 import { isNumber } from '@/utils/is'
-import { ElMessage } from 'element-plus'
 import { useLocaleStore } from '@/store/modules/locale'
 
 const localeStore = useLocaleStore()

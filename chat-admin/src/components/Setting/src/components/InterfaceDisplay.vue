@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { ElSwitch, ElMessage } from 'element-plus'
 import { useI18n } from '@/hooks/web/useI18n'
 import { useAppStore } from '@/store/modules/app'
 import { computed, ref, watch } from 'vue'

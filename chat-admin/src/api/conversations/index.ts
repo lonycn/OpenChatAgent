@@ -2,7 +2,13 @@
  * 会话管理 API
  */
 import request from '@/axios'
-import type { ConversationListParams, ConversationResponse, ConversationListResponse, MessageListResponse, SendMessageParams } from './types'
+import type {
+  ConversationListParams,
+  ConversationResponse,
+  ConversationListResponse,
+  MessageListResponse,
+  SendMessageParams
+} from './types'
 
 const API_PREFIX = '/api/v1/admin/conversations'
 

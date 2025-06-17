@@ -1,7 +1,7 @@
 import request from '@/axios'
-import type { 
-  CustomerListParams, 
-  CustomerListResponse, 
+import type {
+  CustomerListParams,
+  CustomerListResponse,
   CustomerResponse,
   CreateCustomerParams,
   UpdateCustomerParams
@@ -22,7 +22,7 @@ export const getCustomerList = (params: CustomerListParams) => {
           email: 'zhangsan@example.com',
           avatar: '',
           source: 'website' as const,
-          custom_attributes: { 
+          custom_attributes: {
             company: '测试公司',
             phone: '13800138000'
           },
@@ -38,7 +38,7 @@ export const getCustomerList = (params: CustomerListParams) => {
           email: 'lisi@example.com',
           avatar: '',
           source: 'mobile' as const,
-          custom_attributes: { 
+          custom_attributes: {
             company: '科技公司',
             vip_level: 'gold'
           },
@@ -54,7 +54,7 @@ export const getCustomerList = (params: CustomerListParams) => {
           email: 'wangwu@example.com',
           avatar: '',
           source: 'api' as const,
-          custom_attributes: { 
+          custom_attributes: {
             department: '技术部',
             priority: 'high'
           },
@@ -70,7 +70,7 @@ export const getCustomerList = (params: CustomerListParams) => {
           email: 'zhaoliu@example.com',
           avatar: '',
           source: 'website' as const,
-          custom_attributes: { 
+          custom_attributes: {
             region: '华南',
             industry: '制造业'
           },
@@ -125,11 +125,14 @@ export const deleteCustomer = (customerId: string) => {
 }
 
 // 获取客户会话列表
-export const getCustomerConversations = (customerId: string, params?: {
-  page?: number
-  size?: number
-  status?: string
-}) => {
+export const getCustomerConversations = (
+  customerId: string,
+  params?: {
+    page?: number
+    size?: number
+    status?: string
+  }
+) => {
   return request.get({
     url: `${API_PREFIX}/${customerId}/conversations`,
     params
@@ -137,10 +140,13 @@ export const getCustomerConversations = (customerId: string, params?: {
 }
 
 // 为客户创建会话
-export const createCustomerConversation = (customerId: string, data: {
-  channel_type: string
-  initial_message?: string
-}) => {
+export const createCustomerConversation = (
+  customerId: string,
+  data: {
+    channel_type: string
+    initial_message?: string
+  }
+) => {
   return request.post({
     url: `${API_PREFIX}/${customerId}/conversations`,
     data

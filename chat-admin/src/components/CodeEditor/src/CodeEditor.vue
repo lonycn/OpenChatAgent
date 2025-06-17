@@ -1,7 +1,6 @@
 <script setup lang="tsx">
 import { useMonacoEditor } from '@/hooks/web/useMonacoEditor'
 import { onMounted, computed, watch, ref } from 'vue'
-import { ElSelect, ElOption, ElFormItem, ElForm } from 'element-plus'
 import { languageOptions, themeOptions } from './config/config'
 
 const props = withDefaults(

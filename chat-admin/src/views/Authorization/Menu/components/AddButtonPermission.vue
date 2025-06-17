@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { FormSchema, Form } from '@/components/Form'
-import { ElDrawer } from 'element-plus'
 import { reactive } from 'vue'
 import { useForm } from '@/hooks/web/useForm'
 import { useValidator } from '@/hooks/web/useValidator'

@@ -19,11 +19,32 @@ const App: FC = () => {
         },
       }}
     >
-      <div className="App">
-        <MarkdownChatInterface />
+      <div className="App" style={{
+        minHeight: '100vh',
+        backgroundColor: '#1a1a1a',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '0',
+      }}>
+        <div style={{
+          width: '100%',
+          height: '100vh',
+          maxWidth: '900px',
+          maxHeight: '800px',
+          margin: '0 auto',
+          borderRadius: '12px',
+          overflow: 'hidden',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+          backgroundColor: '#fff',
+          display: 'flex',
+          flexDirection: 'column',
+        }} className="chat-container-wrapper">
+          <MarkdownChatInterface />
+        </div>
       </div>
     </ConfigProvider>
   );
 };
 
-export default App; 
+export default App;

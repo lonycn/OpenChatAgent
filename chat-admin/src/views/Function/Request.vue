@@ -1,7 +1,6 @@
 <script lang="ts" setup>
 import { ContentWrap } from '@/components/ContentWrap'
 import { useI18n } from '@/hooks/web/useI18n'
-import { ElDivider } from 'element-plus'
 import { request1, request2, request3, request4, request5, expired } from '@/api/request'
 import { ref } from 'vue'
 import request from '@/axios'

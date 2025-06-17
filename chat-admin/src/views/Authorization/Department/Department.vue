@@ -3,7 +3,6 @@ import { ContentWrap } from '@/components/ContentWrap'
 import { Search } from '@/components/Search'
 import { Dialog } from '@/components/Dialog'
 import { useI18n } from '@/hooks/web/useI18n'
-import { ElTag } from 'element-plus'
 import { Table } from '@/components/Table'
 import {
   getDepartmentApi,

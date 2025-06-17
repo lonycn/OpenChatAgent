@@ -2,7 +2,7 @@
  * 仪表板 API
  */
 import request from '@/axios'
-import type { 
+import type {
   DashboardStatsResponse,
   AgentStatsResponse,
   ConversationTrendsResponse,
@@ -107,10 +107,7 @@ export const getConversationTrends = (params?: {
 /**
  * 获取性能指标
  */
-export const getPerformanceMetrics = (params?: {
-  start_date?: string
-  end_date?: string
-}) => {
+export const getPerformanceMetrics = (params?: { start_date?: string; end_date?: string }) => {
   return request.get<PerformanceMetricsResponse>({
     url: '/admin/analytics/performance',
     params

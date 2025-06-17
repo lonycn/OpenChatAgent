@@ -331,17 +331,19 @@ export const MarkdownChatInterface: React.FC = () => {
   return (
     <Card 
       style={{ 
-        height: '100vh', 
+        height: '100%', 
         display: 'flex', 
         flexDirection: 'column',
         border: 'none',
         borderRadius: 0,
       }}
-      bodyStyle={{ 
-        padding: 0, 
-        height: '100%', 
-        display: 'flex', 
-        flexDirection: 'column' 
+      styles={{
+        body: {
+          padding: 0, 
+          height: '100%', 
+          display: 'flex', 
+          flexDirection: 'column' 
+        }
       }}
     >
       {/* 状态栏 */}
@@ -501,4 +503,4 @@ export const MarkdownChatInterface: React.FC = () => {
   );
 };
 
-export default MarkdownChatInterface; 
+export default MarkdownChatInterface;

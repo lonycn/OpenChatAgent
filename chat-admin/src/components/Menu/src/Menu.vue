@@ -1,6 +1,5 @@
 <script lang="tsx">
 import { computed, defineComponent, unref, PropType } from 'vue'
-import { ElMenu, ElScrollbar } from 'element-plus'
 import { useAppStore } from '@/store/modules/app'
 import { usePermissionStore } from '@/store/modules/permission'
 import { useRenderMenuItem } from './components/useRenderMenuItem'

@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import PanelGroup from './components/PanelGroup.vue'
-import { ElRow, ElCol, ElCard, ElSkeleton } from 'element-plus'
 import { Echart } from '@/components/Echart'
 import { pieOptions, barOptions, lineOptions } from './echarts-data'
 import { ref, reactive, computed, watch, onMounted } from 'vue'

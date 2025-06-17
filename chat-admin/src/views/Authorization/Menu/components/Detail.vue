@@ -2,7 +2,6 @@
 import { PropType, ref } from 'vue'
 import { Descriptions, DescriptionsSchema } from '@/components/Descriptions'
 import { Icon } from '@/components/Icon'
-import { ElTag } from 'element-plus'
 
 defineProps({
   currentRow: {

@@ -1,4 +1,3 @@
-import { ElSubMenu, ElMenuItem } from 'element-plus'
 import { unref } from 'vue'
 import { hasOneShowingChild } from '../helper'
 import { isUrl } from '@/utils/is'

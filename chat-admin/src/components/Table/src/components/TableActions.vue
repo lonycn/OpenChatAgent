@@ -1,6 +1,5 @@
 <script lang="tsx">
 import { defineComponent, unref, computed, PropType, ref } from 'vue'
-import { ElDropdown, ElDropdownMenu, ElDropdownItem, ComponentSize } from 'element-plus'
 import { Icon } from '@/components/Icon'
 import { useI18n } from '@/hooks/web/useI18n'
 import { useAppStore } from '@/store/modules/app'
