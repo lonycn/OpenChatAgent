@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # OpenChatAgent v3.0 开发环境启动脚本
-# 统一架构：chat-api (Python) + chat-front (React) + chat-admin-ui (Ant Design Pro)
+# 统一架构：chat-api (Python) + chat-front (React) + chat-admin (Vue 3 + Element Plus)
 
 set -e
 
@@ -108,7 +108,7 @@ check_ports() {
     
     check_port 8000 "chat-api"
     check_port 8001 "chat-front"
-    check_port 8006 "chat-admin-ui"
+    check_port 4001 "chat-admin"
     
     log_success "端口检查完成"
 }
@@ -219,18 +219,22 @@ setup_node_env() {
         cd ..
     fi
 
-    # 安装 chat-admin-ui 依赖
-    if [ -d "chat-admin-ui" ] && [ -f "chat-admin-ui/package.json" ]; then
-        cd chat-admin-ui
+    # 安装 chat-admin 依赖
+    if [ -d "chat-admin" ] && [ -f "chat-admin/package.json" ]; then
+        cd chat-admin
 
         # 检查是否需要安装依赖
         if [ ! -d "node_modules" ] || [ ! -f ".deps_installed" ] || [ "package.json" -nt ".deps_installed" ]; then
-            log_info "安装 chat-admin-ui 依赖..."
-            npm install --legacy-peer-deps
+            log_info "安装 chat-admin 依赖..."
+            if command -v pnpm &> /dev/null; then
+                pnpm install
+            else
+                npm install --legacy-peer-deps
+            fi
             touch .deps_installed
-            log_success "chat-admin-ui 依赖安装完成"
+            log_success "chat-admin 依赖安装完成"
         else
-            log_info "chat-admin-ui 依赖已是最新，跳过安装"
+            log_info "chat-admin 依赖已是最新，跳过安装"
         fi
 
         cd ..
@@ -270,15 +274,13 @@ start_services() {
 
     sleep 3
 
-    # 启动 chat-admin-ui (Ant Design Pro)
-    log_info "启动 chat-admin-ui (端口 8006)..."
-    cd chat-admin-ui
-    if [ -f "package.json" ] && grep -q "start:dev" package.json; then
-        npm run start:dev &
-    elif [ -f "package.json" ] && grep -q "dev" package.json; then
-        npm run dev -- --port 8006 &
+    # 启动 chat-admin (Vue 3 + Element Plus)
+    log_info "启动 chat-admin (端口 4001)..."
+    cd chat-admin
+    if command -v pnpm &> /dev/null; then
+        pnpm dev &
     else
-        npm start &
+        npm run dev &
     fi
     ADMIN_PID=$!
     cd ..
@@ -298,7 +300,7 @@ show_services() {
     echo ""
     echo "📋 服务访问地址："
     echo "  🖥️  用户聊天界面:   http://localhost:8001"
-    echo "  🛠️  管理后台界面:   http://localhost:8006"
+    echo "  🛠️  管理后台界面:   http://localhost:4001"
     echo "  🔗 API 服务:       http://localhost:8000"
     echo "  📚 API 文档:       http://localhost:8000/docs"
     echo ""
@@ -314,7 +316,7 @@ show_services() {
     echo "🎯 新架构特性："
     echo "  ✅ 统一 Python 后端 (FastAPI)"
     echo "  ✅ 现代化前端 (React + TypeScript)"
-    echo "  ✅ 专业管理后台 (Ant Design Pro)"
+    echo "  ✅ 专业管理后台 (Vue 3 + Element Plus)"
     echo "  ✅ 实时通信 (WebSocket)"
     echo "  ✅ AI 智能回复 (阿里百炼)"
     echo ""
@@ -348,9 +350,9 @@ main() {
     echo ""
     
     # 检查是否在项目根目录
-    if [ ! -d "chat-api" ] || [ ! -d "chat-front" ] || [ ! -d "chat-admin-ui" ]; then
+    if [ ! -d "chat-api" ] || [ ! -d "chat-front" ] || [ ! -d "chat-admin" ]; then
         log_error "请在项目根目录运行此脚本"
-        log_error "确保存在 chat-api、chat-front、chat-admin-ui 目录"
+        log_error "确保存在 chat-api、chat-front、chat-admin 目录"
         exit 1
     fi
     

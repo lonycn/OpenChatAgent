@@ -24,12 +24,13 @@
 
 ### ⚛️ 前端
 - **chat-front**: React + TypeScript + Vite (用户界面)
-- **chat-admin-ui**: Ant Design Pro (管理后台)
+- **chat-admin**: Vue 3 + Element Plus + TypeScript (管理后台) ⭐ 全新重构
 
 ### 🔄 架构升级
 - ✅ **微服务整合**: 4个Node.js服务 → 1个Python服务
 - ✅ **性能提升**: 减少服务间通信开销
 - ✅ **维护简化**: 统一技术栈，降低复杂度
+- ✅ **管理后台重构**: React + Ant Design Pro → Vue 3 + Element Plus ⭐ 新增
 
 ## 🚀 快速开始
 
@@ -72,15 +73,15 @@ npm install
 npm run dev
 
 # 4. 启动管理后台 (新终端)
-cd chat-admin-ui
-npm install
-npm run start:dev
+cd chat-admin
+pnpm install  # 或 npm install
+pnpm dev      # 或 npm run dev
 ```
 
 ### 🌐 访问地址
 
 - 🖥️ **用户聊天界面**: http://localhost:8001
-- 🛠️ **管理后台界面**: http://localhost:8006
+- 🛠️ **管理后台界面**: http://localhost:4001 ⭐ 新端口
 - 🔗 **API 服务**: http://localhost:8000
 - 📚 **API 文档**: http://localhost:8000/docs
 
@@ -92,7 +93,7 @@ npm run start:dev
 # 服务端口配置
 CHAT_API_PORT=8000
 CHAT_FRONT_PORT=8001
-CHAT_ADMIN_UI_PORT=8006
+CHAT_ADMIN_PORT=4001  # 新的管理后台端口
 
 # 数据库配置
 MYSQL_HOST=localhost
@@ -132,11 +133,12 @@ OpenChatAgent/
 │   │   ├── hooks/
 │   │   └── services/
 │   └── package.json
-├── chat-admin-ui/    # 🛠️ Ant Design Pro 管理后台
+├── chat-admin/       # 🛠️ Vue 3 + Element Plus 管理后台 ⭐ 全新重构
 │   ├── src/
-│   │   ├── pages/
-│   │   ├── services/
-│   │   └── components/
+│   │   ├── views/
+│   │   ├── api/
+│   │   ├── components/
+│   │   └── store/
 │   └── package.json
 ├── database/         # 📊 数据库脚本
 ├── docs/            # 📚 项目文档
@@ -233,7 +235,8 @@ MIT License
 - [PORT_CONFIGURATION.md](./PORT_CONFIGURATION.md) - 端口配置说明
 - [chat-api/README.md](./chat-api/README.md) - 后端 API 文档
 - [chat-front/README.md](./chat-front/README.md) - 前端开发指南
-- [chat-admin-ui/README.md](./chat-admin-ui/README.md) - 管理后台指南
+- [chat-admin/README.md](./chat-admin/README.md) - 管理后台指南 ⭐ 全新重构
+- [docs/chat-admin-migration.md](./docs/chat-admin-migration.md) - 管理后台重构文档
 
 ## 🔧 故障排除
 
@@ -297,8 +300,8 @@ cd chat-front
 npm run build
 # 部署 dist/ 目录到 Web 服务器
 
-cd chat-admin-ui
-npm run build
+cd chat-admin
+pnpm build  # 或 npm run build
 # 部署 dist/ 目录到 Web 服务器
 ```
 
