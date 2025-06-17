@@ -1,111 +1,135 @@
 # 🔧 OpenChatAgent 端口配置统一化
 
-## 📋 端口分配总览
+## 📋 端口分配总览 (更新后)
 
-为了便于管理和记忆，所有服务统一使用 **800x** 端口系列：
+**🚀 架构简化**: 原有的4个 Node.js 微服务已整合为1个 Python 统一服务
 
-| 端口 | 服务模块          | 说明                          | 访问地址              |
-| ---- | ----------------- | ----------------------------- | --------------------- |
-| 8001 | **chat-ui**       | 用户前端聊天界面              | http://localhost:8001 |
-| 8002 | **chat-core**     | 消息网关 + WebSocket 服务     | http://localhost:8002 |
-| 8003 | **ai-service**    | AI 服务 (阿里百炼 API)        | http://localhost:8003 |
-| 8004 | **chat-session**  | 会话管理服务 (Redis)          | http://localhost:8004 |
-| 8005 | **chat-admin**    | 管理后台 API                  | http://localhost:8005 |
-| 8006 | **chat-admin-ui** | 管理后台前端 (Ant Design Pro) | http://localhost:8006 |
+| 端口 | 服务模块          | 说明                          | 访问地址              | 状态 |
+| ---- | ----------------- | ----------------------------- | --------------------- | ---- |
+| 8000 | **chat-api**      | 统一后端服务 (Python FastAPI) | http://localhost:8000 | ✅ 活跃 |
+| 8001 | **chat-front**    | 用户前端聊天界面 (React)       | http://localhost:8001 | ✅ 活跃 |
+| 8006 | **chat-admin-ui** | 管理后台前端 (Ant Design Pro) | http://localhost:8006 | ✅ 活跃 |
 
-## 🔄 服务间调用关系
+## 🗑️ 已删除的旧服务
+
+| 端口 | 旧服务模块        | 整合到                        | 状态 |
+| ---- | ----------------- | ----------------------------- | ---- |
+| 8002 | ~~chat-core~~     | chat-api/src/websocket/       | ❌ 已删除 |
+| 8003 | ~~ai-service~~    | chat-api/src/ai/              | ❌ 已删除 |
+| 8004 | ~~chat-session~~  | chat-api/src/session/         | ❌ 已删除 |
+| 8005 | ~~chat-admin~~    | chat-api/src/admin/           | ❌ 已删除 |
+
+## 🔄 新架构服务调用关系
 
 ```mermaid
 graph TD
-    A[用户浏览器] -->|HTTP| B[chat-ui:8001]
-    B -->|WebSocket| C[chat-core:8002]
-    C -->|HTTP| D[ai-service:8003]
-    C -->|HTTP| E[chat-session:8004]
-    E -->|TCP| F[Redis数据库]
-
+    A[用户浏览器] -->|HTTP| B[chat-front:8001]
     G[管理员浏览器] -->|HTTP| H[chat-admin-ui:8006]
-    H -->|HTTP API| I[chat-admin:8005]
+
+    B -->|WebSocket/HTTP| C[chat-api:8000]
+    H -->|HTTP API| C
+
+    C -->|API| D[(阿里百炼 API)]
+    C -->|TCP| E[(Redis)]
+    C -->|TCP| F[(MySQL)]
+
+    subgraph "chat-api 统一服务"
+        C1[WebSocket 模块]
+        C2[AI 服务模块]
+        C3[会话管理模块]
+        C4[管理后台模块]
+        C5[认证模块]
+    end
+
+    C --> C1
+    C --> C2
+    C --> C3
+    C --> C4
+    C --> C5
 
     style B fill:#e1f5fe
-    style C fill:#f3e5f5
-    style D fill:#fff8e1
-    style E fill:#e8f5e8
-    style H fill:#fce4ec
-    style I fill:#fff3e0
+    style H fill:#f3e5f5
+    style C fill:#e8f5e8
+    style C1 fill:#fff3e0
+    style C2 fill:#e8f5e8
+    style C3 fill:#fce4ec
+    style C4 fill:#fff8e1
+    style C5 fill:#f0f4c3
 ```
 
 ## ⚙️ 环境变量配置
 
 ```bash
-# .env 文件配置
-CHAT_UI_PORT=8001
-CHAT_CORE_PORT=8002
-AI_SERVICE_PORT=8003
-CHAT_SESSION_PORT=8004
-CHAT_ADMIN_PORT=8005
+# .env 文件配置 (更新后)
+CHAT_API_PORT=8000
+CHAT_FRONT_PORT=8001
 CHAT_ADMIN_UI_PORT=8006
+
+# 前端环境变量
+VITE_CHAT_API_WS_URL=ws://localhost:8000/ws
+VITE_CHAT_API_URL=http://localhost:8000/api/v1
+REACT_APP_API_BASE_URL=http://localhost:8000/api/v1
 ```
 
-## 🚀 启动服务
+## 🚀 启动服务 (更新后)
 
 ### 单独启动
 
 ```bash
-# 用户前端
-cd chat-ui && npm run dev          # http://localhost:8001
+# 统一后端服务 (Python FastAPI)
+cd chat-api && python run.py       # http://localhost:8000
 
-# 消息网关
-cd chat-core && npm run dev        # http://localhost:8002
+# 用户前端 (React)
+cd chat-front && npm run dev       # http://localhost:8001
 
-# AI服务
-cd ai-service && npm run dev       # http://localhost:8003
-
-# 会话管理
-cd chat-session && npm run dev     # http://localhost:8004
-
-# 管理后台API
-cd chat-admin && npm run dev       # http://localhost:8005
-
-# 管理后台前端
+# 管理后台前端 (Ant Design Pro)
 cd chat-admin-ui && npm run start:dev  # http://localhost:8006
 ```
 
 ### 一键启动
 
 ```bash
-# 启动所有服务 (自动同步环境配置)
-npm run dev
-
-# 或使用便捷脚本
+# 启动所有服务
 ./start-dev.sh
 
-# 手动同步环境配置
-npm run env:sync
+# 或分别启动
+npm run dev:api     # 启动 chat-api
+npm run dev:front   # 启动 chat-front
+npm run dev:admin   # 启动 chat-admin-ui
 ```
 
-## 🔍 健康检查
+## 🔍 健康检查 (更新后)
 
 ```bash
 # 检查所有服务状态
-curl -s http://localhost:8001 && echo "✅ chat-ui"
-curl -s http://localhost:8002/api/health && echo "✅ chat-core"
-curl -s http://localhost:8003/health && echo "✅ ai-service"
-curl -s http://localhost:8004/health && echo "✅ chat-session"
-curl -s http://localhost:8005/health && echo "✅ chat-admin"
+curl -s http://localhost:8000/health && echo "✅ chat-api"
+curl -s http://localhost:8001 && echo "✅ chat-front"
 curl -s http://localhost:8006 && echo "✅ chat-admin-ui"
+
+# 检查 API 文档
+curl -s http://localhost:8000/docs && echo "✅ API 文档可访问"
 ```
 
 ## 🛠️ 端口冲突解决
 
 ```bash
 # 查看端口占用
-lsof -i :8001,8002,8003,8004,8005,8006
+lsof -i :8000,8001,8006
 
-# 强制清理所有进程
-pkill -f "node\|npm\|max\|umi"
+# 强制清理进程
+pkill -f "python\|node\|npm\|max\|umi"
+
+# 清理 Python 进程
+pkill -f "uvicorn\|fastapi"
 ```
 
 ## 📝 更新记录
+
+- **v3.0.0 (2025-06-16)**: 架构重构 - 微服务整合
+  - ✅ 删除 4 个 Node.js 微服务
+  - ✅ 整合为 1 个 Python 统一服务 (chat-api:8000)
+  - ✅ 保留前端服务 (chat-front:8001, chat-admin-ui:8006)
+  - ✅ 更新所有接口调用配置
 
 - **v2.0.0 (2025-01-17)**: 端口统一化为 800x 系列
   - chat-ui: 5173 → 8001
@@ -117,9 +141,10 @@ pkill -f "node\|npm\|max\|umi"
 
 ---
 
-**优势**：
+**新架构优势**：
 
-- ✅ 端口号连续，便于记忆
-- ✅ 避免与其他服务端口冲突
-- ✅ 统一的 800x 命名规范
-- ✅ 更专业的端口管理
+- ✅ 服务数量从 6 个减少到 3 个
+- ✅ 统一的 Python 后端，便于维护
+- ✅ 减少服务间通信复杂度
+- ✅ 更好的性能和资源利用率
+- ✅ 简化的部署和监控

@@ -78,7 +78,7 @@ def create_refresh_token(data: Dict[str, Any]) -> str:
     return encoded_jwt
 
 
-@router.post("/login", response_model=Token, summary="用户登录")
+@router.post("/login", summary="用户登录")
 async def login(
     request: Request,
     user_login: UserLogin,
@@ -133,12 +133,30 @@ async def login(
         
         logger.info(f"User logged in: {user.email} (ID: {user.id})")
         
-        return Token(
-            access_token=access_token,
-            token_type="bearer",
-            expires_in=settings.JWT_EXPIRE_MINUTES * 60,
-            refresh_token=refresh_token
-        )
+        # 获取用户详细信息
+        user_dict = {
+            "id": user.id,
+            "uuid": str(user.uuid),
+            "username": user.email.split('@')[0],
+            "email": user.email,
+            "full_name": user.full_name,
+            "avatar_url": user.avatar_url,
+            "role": user.role.value,
+            "status": user.status.value,
+            "department": None,  # 暂时没有部门字段
+            "phone": None  # 暂时没有电话字段
+        }
+
+        # 返回前端期望的格式
+        return {
+            "success": True,
+            "data": {
+                "user": user_dict,
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "permissions": ["admin"] if user.role == "admin" else ["user"]
+            }
+        }
         
     except AuthenticationException:
         raise
@@ -271,12 +289,58 @@ async def get_current_user_info(
     try:
         user_service = UserService(db)
         user = await user_service.get_user_by_id(current_user.user_id)
-        
+
         if not user:
             raise AuthenticationException("用户不存在")
-        
+
         return UserResponse.model_validate(user)
-        
+
+    except AuthenticationException:
+        raise
+    except Exception as e:
+        logger.error(f"Get current user error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="获取用户信息失败"
+        )
+
+
+@router.get("/current-user", summary="获取当前用户信息（前端兼容）")
+async def get_current_user(
+    request: Request,
+    current_user: TokenData = Depends(get_current_user_required),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    获取当前登录用户的详细信息（前端兼容格式）
+    """
+    try:
+        user_service = UserService(db)
+        user = await user_service.get_user_by_id(current_user.user_id)
+
+        if not user:
+            raise AuthenticationException("用户不存在")
+
+        user_dict = {
+            "id": user.id,
+            "uuid": str(user.uuid),
+            "username": user.email.split('@')[0],
+            "email": user.email,
+            "full_name": user.full_name,
+            "avatar_url": user.avatar_url,
+            "role": user.role.value,
+            "status": user.status.value,
+            "department": None,  # 暂时没有部门字段
+            "phone": None  # 暂时没有电话字段
+        }
+
+        return {
+            "success": True,
+            "data": {
+                "user": user_dict
+            }
+        }
+
     except AuthenticationException:
         raise
     except Exception as e:

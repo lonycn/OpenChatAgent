@@ -1,15 +1,22 @@
 // WebSocket 消息类型
 export interface WebSocketMessage {
-  type: 'text' | 'stream' | 'response' | 'system' | 'ping' | 'pong';
+  type: 'message' | 'text' | 'stream' | 'response' | 'system' | 'ping' | 'pong' | 'heartbeat' | 'ai_stream';
   id?: string;
   text?: string;
+  content?: string;
   fullText?: string;
+  full_content?: string;
   isComplete?: boolean;
+  is_complete?: boolean;
   from?: 'user' | 'ai' | 'human' | 'system';
+  sender_type?: string;
   timestamp?: string;
   sessionId?: string;
+  session_id?: string;
   userId?: string;
+  user_id?: string;
   action?: string;
+  message_type?: string;
 }
 
 // 聊天消息类型

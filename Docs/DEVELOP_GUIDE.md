@@ -1,351 +1,364 @@
-# 🧱 DEVELOP_GUIDE：AI 智能客服系统开发指南
+# 🧱 OpenChatAgent v3.0 开发指南
 
-## 🔧 端口统一配置 (800x 系列)
+## 🚀 架构概述
 
-为了便于管理和记忆，所有服务统一使用 **800x** 端口系列：
+OpenChatAgent v3.0 采用现代化的统一服务架构，专注于高性能和易维护性：
 
-| 服务模块          | 端口 | 说明                          |
-| ----------------- | ---- | ----------------------------- |
-| **chat-ui**       | 8001 | 用户前端聊天界面              |
-| **chat-core**     | 8002 | 消息网关 + WebSocket 服务     |
-| **ai-service**    | 8003 | AI 服务 (阿里百炼 API)        |
-| **chat-session**  | 8004 | 会话管理服务 (Redis)          |
-| **chat-admin**    | 8005 | 管理后台 API                  |
-| **chat-admin-ui** | 8006 | 管理后台前端 (Ant Design Pro) |
+| 服务模块 | 端口 | 技术栈 | 说明 |
+|---------|------|--------|------|
+| **chat-api** | 8000 | Python FastAPI | 统一后端服务 |
+| **chat-front** | 8001 | React + TypeScript | 用户聊天界面 |
+| **chat-admin-ui** | 8006 | Ant Design Pro | 管理后台界面 |
 
-**服务间调用关系**：
+### 🎯 核心特性
 
-- `chat-ui (8001)` → WebSocket → `chat-core (8002)`
-- `chat-core (8002)` → HTTP → `ai-service (8003)` + `chat-session (8004)`
-- `chat-admin-ui (8006)` → HTTP → `chat-admin (8005)`
+- 🤖 **AI 智能回复**: 基于阿里百炼 DashScope
+- 👨‍💻 **人工接管**: 无缝 AI/人工切换
+- 🔄 **实时通信**: WebSocket 流式对话
+- 📊 **管理后台**: 完整的客服管理系统
+- 🐳 **容器化**: Docker 支持，便于部署
 
----
+## 📦 项目结构
 
-本文件基于当前 AI + 人工客服系统的整体架构，细化了每个子模块的功能设计，借鉴 Chatwoot 的功能体系，并结合 Ant Design X、阿里百炼 MCP、Redis 状态协同的技术实现。
+```
+OpenChatAgent/
+├── chat-api/         # 🐍 Python 统一后端
+│   ├── src/
+│   │   ├── api/      # REST API 路由
+│   │   ├── websocket/# WebSocket 处理
+│   │   ├── ai/       # AI 服务模块
+│   │   ├── session/  # 会话管理
+│   │   ├── admin/    # 管理后台 API
+│   │   └── models/   # 数据模型
+│   └── requirements.txt
+├── chat-front/       # ⚛️ React 用户界面
+│   ├── src/
+│   │   ├── components/
+│   │   ├── hooks/
+│   │   └── services/
+│   └── package.json
+├── chat-admin-ui/    # 🛠️ 管理后台
+│   ├── src/
+│   │   ├── pages/
+│   │   ├── services/
+│   │   └── components/
+│   └── package.json
+├── database/         # 📊 数据库脚本
+├── docs/            # 📚 项目文档
+└── scripts/         # 🔧 管理脚本
+```
 
-## 🚀 MVP 开发顺序（4 周计划）
+## 🛠️ 开发环境搭建
 
-### 第 1 周：后端基础设施（并行开发）
+### 1. 环境要求
 
-1. **ai-service** - 阿里百炼 API 封装
-2. **chat-session** - Redis 会话管理
-3. **chat-core** - 消息网关和路由
+- **Python**: >= 3.11
+- **Node.js**: >= 16.0.0
+- **MySQL**: >= 8.0
+- **Redis**: >= 6.0
 
-### 第 2 周：前端界面开发（并行开发）
+### 2. 快速启动
 
-4. **chat-ui** - Web 聊天界面
-5. **chat-client** - 多端客户端
+```bash
+# 1. 克隆项目
+git clone <repository-url>
+cd OpenChatAgent
 
-### 第 3 周：管理后台开发
+# 2. 配置环境变量
+cp .env.example .env
+# 编辑 .env 文件，配置数据库和 API 密钥
 
-6. **chat-admin** - 客服管理后台
+# 3. 启动后端服务
+cd chat-api
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+python run.py
 
-### 第 4 周：集成测试和部署
+# 4. 启动前端服务 (新终端)
+cd chat-front
+npm install
+npm run dev
 
-- 端到端测试
-- 性能优化
-- 生产部署
+# 5. 启动管理后台 (新终端)
+cd chat-admin-ui
+npm install
+npm run start:dev
+```
 
-> 💡 **开发建议**：严格按照 🔥 P0 → 🟡 P1 → 🟢 P2 优先级开发，确保 MVP 核心功能优先完成。
+### 3. 访问地址
 
----
+- **用户聊天界面**: http://localhost:8001
+- **管理后台**: http://localhost:8006
+- **API 文档**: http://localhost:8000/docs
 
-## 📁 1. chat-ui（前端聊天界面）
+## 🔧 核心功能开发
 
-### 📌 目标
+### 1. chat-front (用户聊天界面)
 
-提供用户对话界面，支持 AI 对话气泡、人工接管提示、快捷指令、满意度反馈。
+**核心功能**:
+- 实时聊天界面 (React + TypeScript)
+- WebSocket 连接管理
+- 消息流式显示
+- AI/人工切换提示
+- 满意度反馈
 
-### ✅ 功能设计
+**关键文件**:
+- `src/hooks/useChat.ts` - 聊天逻辑
+- `src/hooks/useStreamingChat.ts` - 流式聊天
+- `src/services/websocket.ts` - WebSocket 服务
 
-- 聊天消息展示（气泡样式：左用户 / 右 AI / 系统提示）
+**WebSocket 连接**:
+```typescript
+// 连接到统一后端
+const wsUrl = 'ws://localhost:8000/ws';
 
-- 输入框 + 发送按钮（支持快捷 Enter / Shift+Enter）
-
-- 发送消息节流控制（避免暴刷）
-
-- 会话状态提示（当前由 AI 还是人工服务）
-
-- 接管按钮（显示"转人工"/"AI 接管"）
-
-- 满意度反馈按钮（👍 👎）
-
-- 快捷指令入口（如常见问题、查看订单等）
-
-- 滚动加载历史记录（分页）
-
-### 📦 技术建议
-
-- 使用 React + Ant Design X (ProChat 组件)
-
-- 状态管理：useXChat + useXAgent
-
-- 消息下推：WebSocket (已实现)
-
-### 🔌 WebSocket 实现详情
-
-**连接流程**：
-
-1. 页面加载时自动建立 WebSocket 连接到 `ws://localhost:8002`
-2. 发送第一条消息时自动初始化会话（`type: 'init'`）
-3. 后续消息使用常规文本格式（`type: 'text'`）
-
-**消息格式**：
-
-```javascript
-// 初始化消息
-{
-  type: 'init',
-  payload: {
-    userId: 'generated-uuid',
-    initialMessage: { text: '用户消息', type: 'text' }
-  }
-}
-
-// 常规消息
-{
-  type: 'text',
-  text: '用户消息内容',
-  sessionId: 'session-uuid',
-  userId: 'user-uuid'
+// 消息格式
+interface ChatMessage {
+  type: 'text' | 'system' | 'init';
+  content: string;
+  sessionId?: string;
+  userId?: string;
 }
 ```
 
-**ProChat 配置**：
+### 2. chat-api (统一后端服务)
 
-- `request={false}` - 禁用 HTTP 请求模式
-- `modelProvider="custom"` - 使用自定义提供者
-- 完全通过 WebSocket 处理消息收发
+**核心功能**:
+- FastAPI 异步 Web 框架
+- WebSocket 实时通信
+- AI 服务集成 (阿里百炼)
+- 会话管理 (Redis + MySQL)
+- 管理后台 API
+
+**关键模块**:
+
+#### WebSocket 模块 (`src/websocket/`)
+```python
+# WebSocket 连接管理
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    async def send_message(self, message: str, websocket: WebSocket):
+        await websocket.send_text(message)
+```
+
+#### AI 服务模块 (`src/ai/`)
+```python
+# 阿里百炼集成
+class DashScopeService:
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+
+    async def chat_completion(self, messages: List[dict]) -> str:
+        # 调用阿里百炼 API
+        pass
+```
+
+#### 会话管理模块 (`src/session/`)
+```python
+# 会话管理
+class SessionManager:
+    def __init__(self, redis_client, mysql_client):
+        self.redis = redis_client
+        self.mysql = mysql_client
+
+    async def create_session(self, user_id: str) -> str:
+        # 创建新会话
+        pass
+
+    async def get_session_history(self, session_id: str) -> List[dict]:
+        # 获取会话历史
+        pass
+```
+
+**API 端点**:
+- `GET /health` - 健康检查
+- `POST /api/v1/chat` - 聊天接口
+- `GET /api/v1/sessions/{session_id}` - 获取会话
+- `POST /api/v1/admin/login` - 管理员登录
+- `WebSocket /ws` - WebSocket 连接
+
+### 3. chat-admin-ui (管理后台)
+
+**核心功能**:
+- Ant Design Pro 管理界面
+- 会话监控和管理
+- 客服工作台
+- 系统配置管理
+- 数据统计分析
+
+**关键页面**:
+- `src/pages/Dashboard/` - 仪表板
+- `src/pages/Conversations/` - 会话管理
+- `src/pages/Settings/` - 系统设置
+
+**API 集成**:
+```typescript
+// 管理后台 API 服务
+export const adminApi = {
+  // 获取会话列表
+  getConversations: () => request('/api/v1/admin/conversations'),
+
+  // 接管会话
+  takeoverSession: (sessionId: string) =>
+    request(`/api/v1/admin/sessions/${sessionId}/takeover`, {
+      method: 'POST'
+    }),
+
+  // 获取统计数据
+  getStatistics: () => request('/api/v1/admin/statistics')
+};
+```
+
+## 🚀 快速开始
+
+### 1. 环境准备
+
+```bash
+# 检查系统要求
+python3 --version  # >= 3.11
+node --version      # >= 16.0.0
+
+# 检查数据库
+mysql -h localhost -u root -p123456 -e "SELECT 1;"
+redis-cli ping
+```
+
+### 2. 一键启动
+
+```bash
+# 克隆项目
+git clone <repository-url>
+cd OpenChatAgent
+
+# 配置环境变量
+cp .env.example .env
+# 编辑 .env 文件，配置数据库和 API 密钥
+
+# 启动所有服务
+./start-dev.sh
+```
+
+### 3. 访问服务
+
+- **用户聊天界面**: http://localhost:8001
+- **管理后台界面**: http://localhost:8006
+- **API 服务**: http://localhost:8000
+- **API 文档**: http://localhost:8000/docs
+
+## 🔧 开发工具
+
+### 启动和停止
+
+```bash
+# 启动开发环境
+./start-dev.sh
+
+# 停止所有服务
+./scripts/stop-dev.sh
+
+# 强制清理进程
+./scripts/kill-dev.sh
+
+# 检查服务状态
+./scripts/check-status.sh
+```
+
+### 单独启动服务
+
+```bash
+# 仅启动后端 API
+cd chat-api
+source venv/bin/activate
+python run.py
+
+# 仅启动用户前端
+cd chat-front
+npm run dev
+
+# 仅启动管理后台
+cd chat-admin-ui
+npm run start:dev
+```
+
+## � 开发流程
+
+### 1. 功能开发流程
+
+```mermaid
+graph LR
+    A[需求分析] --> B[接口设计]
+    B --> C[后端开发]
+    C --> D[前端开发]
+    D --> E[联调测试]
+    E --> F[部署上线]
+```
+
+### 2. 代码规范
+
+**Python 后端**:
+- 使用 `black` 格式化代码
+- 使用 `flake8` 检查代码质量
+- 使用 `mypy` 进行类型检查
+- 遵循 PEP 8 规范
+
+**TypeScript 前端**:
+- 使用 `prettier` 格式化代码
+- 使用 `eslint` 检查代码质量
+- 严格的 TypeScript 类型检查
+- 遵循 React 最佳实践
+
+### 3. 测试策略
+
+**单元测试**:
+- 后端: `pytest` + `pytest-asyncio`
+- 前端: `Jest` + `React Testing Library`
+
+**集成测试**:
+- API 接口测试
+- WebSocket 连接测试
+- 端到端功能测试
+
+**性能测试**:
+- 并发连接测试
+- 响应时间测试
+- 内存使用监控
+
+## 🚀 部署指南
+
+### 开发环境
+```bash
+# 使用 Docker Compose
+docker-compose -f docker-compose.dev.yml up -d
+```
+
+### 生产环境
+```bash
+# 使用 Docker Compose
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+### 监控和日志
+- 使用 `Prometheus` + `Grafana` 监控
+- 使用 `ELK Stack` 日志收集
+- 使用 `Sentry` 错误追踪
 
 ---
 
-## 📁 2. chat-core（消息网关 + 状态控制服务）
+## 📚 相关文档
 
-### 📌 目标
-
-统一接入所有前端消息，路由至 AI 或人工，并维护会话状态（是否接管、上下文）
-
-### ✅ 功能设计
-
-- WebSocket 服务端实现（每个客户端建立 session）
-
-- 接收用户消息并记录上下文
-
-- 判断当前 agent（ai/human），转发消息
-
-- 接收 AI 回复后下发
-
-- 提供 REST API：
-
-  - `POST /switch-agent` 切换接待方
-
-  - `GET /session/:id` 获取当前状态
-
-  - `POST /feedback` 提交用户反馈
-
-### 📦 技术建议
-
-- Node.js + Express + ws (已实现)
-
-- 会话状态：Redis
-
-- 日志记录：本地文件或 SQLite（开发期）
-
-### 🔌 WebSocket 服务器实现
-
-**核心功能**：
-
-- 连接管理：自动分配连接 ID，维护活跃连接池
-- 消息验证：使用 Joi 验证消息格式
-- 会话路由：根据消息类型路由到 AI 服务或人工客服
-- 错误处理：完善的异常处理和错误反馈机制
-
-**支持的消息类型**：
-
-- `init` - 会话初始化
-- `text` - 文本消息
-- `system` - 系统消息
-- `image` - 图片消息（预留）
-- `file` - 文件消息（预留）
-
-**API 端点**：
-
-- `GET /api/health` - 健康检查
-- `POST /api/openai/chat` - OpenAI 兼容接口（备用）
-- `POST /api/sessions/:id/switch-agent` - 切换代理
+- [ARCHITECTURE_MIGRATION.md](./ARCHITECTURE_MIGRATION.md) - 架构迁移指南
+- [API_REFERENCE.md](../chat-api/docs/API_REFERENCE.md) - API 参考文档
+- [DEPLOYMENT.md](./DEPLOYMENT.md) - 部署指南
+- [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) - 故障排除
 
 ---
 
-## 📁 3. ai-service（阿里百炼封装）
-
-### 📌 目标
-
-统一封装与阿里百炼 DashScope MCP 的 API 调用（会话、知识库、工作流）
-
-### ✅ 功能设计
-
-- `sendMessage(sessionId, text)` → AI 回复文本
-
-- `uploadKnowledge(doc)` → 上传 FAQ 文档
-
-- `callFunction(intent, slots)` → 调用插件能力
-
-- 自动识别是否需要调用 MCP 工作流（如物流查询）
-
-- 自动拼接上下文（记忆支持）
-
-- 错误处理机制（token 过期等）
-
-### 📦 技术建议
-
-- axios 封装 REST API
-
-- 配置文件管理 ak/sk、agentId
-
-- 接入缓存机制避免重复调用
-
----
-
-## 📁 4. chat-session（会话管理模块）
-
-### 📌 目标
-
-负责维护会话的上下文信息、接待方状态、消息记录、session 生命周期。
-
-### ✅ 功能设计
-
-- Redis 数据结构设计：
-
-  - `session:<id>:agent` = ai / human
-
-  - `session:<id>:history` = List[{from, msg, ts}]
-
-  - `session:<id>:meta` = user_id, created_at, etc.
-
-- 会话过期策略（24h 自动清除）
-
-- 上下文截断策略（仅传近 N 条给 AI）
-
-- 接管切换记录（带时间戳）
-
-### 📦 技术建议
-
-- Redis client：ioredis
-
-- 采用 namespace 结构防止污染
-
-- 可加 Lua 脚本优化读取操作
-
----
-
-## 📁 5. chat-admin（客服管理后台）
-
-### 📌 目标
-
-提供内部客服人员的可视化界面，显示对话列表、接管入口、评分记录。
-
-### ✅ 功能设计
-
-- 会话池视图（当前活跃会话、状态、转人工按钮）
-
-- 客服登录、权限控制
-
-- 客服点击某会话 → 接管（自动更新 Redis agent 状态）
-
-- 会话详情面板（对话内容、上下文、评分）
-
-- 历史对话搜索（按用户/关键词）
-
-- 标记 AI 错误回复记录
-
-### 📦 技术建议
-
-- 基于 ant-design-pro / react-admin 搭建
-
-- 使用统一 API（由 chat-core 暴露）
-
-- 提供客服身份的 token 校验机制
-
----
-
-## 📁 6. chat-client（多端接入入口）
-
-### 📌 目标
-
-支持 H5 网页、小程序、公众号等接入渠道，打通统一 AI 服务。
-
-### ✅ 功能设计
-
-- 建立唯一 session_id 机制（设备 ID + 用户 ID）
-
-- WebSocket / 微信消息接口 对接 chat-core
-
-- 使用 uniapp 封装通用聊天组件
-
-- 自动回复欢迎语，错误提示（如 AI 暂停）
-
-- 探测用户活跃度（进入/退出会话）
-
-- 持久化本地记录（如聊天缓存）
-
-### 📦 技术建议
-
-- uniapp + Vue3 + uView / vant
-
-- WebSocket 通道统一封装
-
-- 微信端采用服务号或企微对接消息
-
----
-
-# 📌 总结
-
-该 DEVELOP_GUIDE 文档将作为开发团队的模块划分说明书。每个模块具备清晰的边界、职责和通信接口，满足"默认 AI 服务 + 人工随时接管 + 多端接入 + 快速上线"目标.
-
----
-
-# 核心模块 TODO（按开发优先级排序）
-
-## 1
-
-[x] TODO_ai-service.md - AI 服务模块
-阿里百炼 API 封装
-对话和知识库集成
-第 1 周开发重点
-
-## 2
-
-[x] TODO_chat-session.md - 会话管理模块
-Redis 会话状态管理
-消息历史存储
-第 1 周开发重点
-
-## 3
-
-[x] TODO_chat-core.md - 消息网关模块
-WebSocket + REST API
-消息路由和状态控制
-第 1 周开发重点
-
-## 4
-
-[x] TODO_chat-ui.md - 前端聊天界面
-Ant Design X 聊天组件
-用户交互界面
-第 2 周开发重点
-
-[] TODO_chat-client.md - 多端客户端
-uniapp 多端适配
-H5/小程序支持
-第 2 周开发重点
-
-[] TODO_chat-admin.md - 管理后台
-客服工作台
-会话接管功能
-第 3 周开发重点
-🗺️ 总体规划文档
-
-[] TODO_MVP_ROADMAP.md - MVP 开发路线图
-4 周详细开发计划
-模块依赖关系图
-风险控制和成功指标
+**更新日期**: 2025-06-16
+**版本**: v3.0.0

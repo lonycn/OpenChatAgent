@@ -156,7 +156,7 @@ export class WebSocketService {
         this.log('收到消息:', data);
         
         // 处理心跳响应
-        if (data.type === 'pong') {
+        if (data.type === 'pong' || data.type === 'heartbeat') {
           this.log('收到心跳响应');
           return;
         }

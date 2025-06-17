@@ -86,7 +86,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                     "status_code": response.status_code,
                     "process_time": round(process_time, 4),
                     "response_size": self._get_response_size(response),
-                    "user_id": getattr(request.state, "user", {}).get("user_id") if hasattr(request.state, "user") else None,
+                    "user_id": getattr(request.state, "user", {}).user_id if hasattr(request.state, "user") and hasattr(getattr(request.state, "user", {}), "user_id") else None,
                     "event_type": "request_complete",
                 }
             )

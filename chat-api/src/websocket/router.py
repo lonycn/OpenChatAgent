@@ -40,12 +40,13 @@ async def websocket_endpoint(websocket: WebSocket):
         connection_id = await websocket_manager.connect(websocket)
         
         # 发送连接确认
+        from datetime import datetime
         welcome_message = WebSocketResponse(
             type="connection",
             data={
                 "connection_id": connection_id,
                 "status": "connected",
-                "server_time": "2024-01-01T00:00:00Z"
+                "server_time": datetime.now().isoformat()
             }
         )
         await websocket_manager.send_to_connection(
@@ -104,7 +105,7 @@ async def handle_websocket_message(connection_id: str, message_data: Dict[str, A
             await handle_auth_message(connection_id, message_data)
         elif message_type == "ping":
             await handle_ping_message(connection_id, message_data)
-        elif message_type == "message":
+        elif message_type == "message" or message_type == "text":
             await handle_chat_message(connection_id, message_data)
         elif message_type == "typing":
             await handle_typing_message(connection_id, message_data)
@@ -203,54 +204,63 @@ async def handle_ping_message(connection_id: str, message_data: Dict[str, Any]):
 async def handle_chat_message(connection_id: str, message_data: Dict[str, Any]):
     """处理聊天消息"""
     try:
-        message = WebSocketMessageSend(**message_data)
-        
+        # 兼容不同的消息格式
+        content = message_data.get("content") or message_data.get("text", "")
+        session_id = message_data.get("session_id") or message_data.get("sessionId")
+        message_id = message_data.get("id") or message_data.get("message_id")
+
         connection = websocket_manager.get_connection(connection_id)
-        if not connection or not connection.authenticated:
-            await send_error_response(connection_id, "NOT_AUTHENTICATED", "未认证")
+        if not connection:
+            await send_error_response(connection_id, "CONNECTION_NOT_FOUND", "连接不存在")
             return
-        
-        # 这里应该调用消息服务处理消息
-        # message_service = MessageService()
-        # result = await message_service.process_websocket_message(message, connection)
-        
-        # 暂时返回模拟响应
-        response = WebSocketResponse(
-            type="message",
-            data={
-                "message_id": "msg_123",
-                "session_id": message.session_id,
-                "content": message.content,
-                "sender": connection.user_id,
-                "timestamp": "2024-01-01T00:00:00Z"
-            }
-        )
-        
-        # 发送到会话的所有连接
-        if message.session_id:
-            await websocket_manager.send_to_session(
-                message.session_id,
-                response.model_dump(),
-                exclude_connection=connection_id
+
+        # 自动认证匿名用户
+        if not connection.authenticated:
+            connection.authenticated = True
+            connection.user_id = connection.user_id or f"user_{connection_id[:8]}"
+
+        # 如果没有会话ID，创建一个新的会话
+        if not session_id:
+            from src.session.manager import session_manager
+            session_id = await session_manager.create_session(
+                user_id=connection.user_id or "anonymous",
+                metadata={"connection_id": connection_id}
             )
-        
-        # 确认消息已发送
+
+        # 确认消息已收到
         confirm_response = WebSocketResponse(
             type="message_sent",
             data={
-                "message_id": "msg_123",
-                "status": "sent"
+                "message_id": message_id,
+                "session_id": session_id,
+                "status": "received"
             }
         )
-        
+
         await websocket_manager.send_to_connection(
             connection_id,
             confirm_response.model_dump()
         )
-        
+
+        # 调用消息服务处理消息并获取AI回复
+        from src.services.message import MessageService
+        from src.models.message import MessageSend
+
+        message_service = MessageService()
+
+        # 构建消息数据
+        message_send = MessageSend(
+            session_id=session_id,
+            content=content,
+            message_type="text"
+        )
+
+        # 发送消息并触发AI回复
+        await message_service.send_message(message_send)
+
     except Exception as e:
         logger.error(f"Chat message error: {e}")
-        await send_error_response(connection_id, "MESSAGE_ERROR", "消息发送失败")
+        await send_error_response(connection_id, "MESSAGE_ERROR", f"消息处理失败: {str(e)}")
 
 
 async def handle_typing_message(connection_id: str, message_data: Dict[str, Any]):

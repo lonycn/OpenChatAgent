@@ -30,7 +30,7 @@ export function useChat() {
   // 初始化 WebSocket 服务
   useEffect(() => {
     const wsService = createWebSocketService({
-      url: 'ws://localhost:8002',
+      url: 'ws://localhost:8000/ws',
       maxReconnectAttempts: 5,
       reconnectInterval: 2000,
       heartbeatInterval: 30000,
@@ -108,13 +108,23 @@ export function useChat() {
     // 处理不同类型的消息
     switch (data.type) {
       case 'stream':
+      case 'ai_stream':
         handleStreamMessage(data);
         break;
       case 'text':
+      case 'message':
         handleTextMessage(data);
         break;
       case 'system':
         handleSystemMessage(data);
+        break;
+      case 'message_sent':
+        // 消息发送确认，可以更新消息状态
+        console.log('消息发送确认:', data);
+        break;
+      case 'error':
+        console.error('WebSocket错误:', data);
+        addSystemMessage(data.data?.error || '发生错误');
         break;
       default:
         console.log('未知消息类型:', data.type);
@@ -124,9 +134,9 @@ export function useChat() {
   // 处理流式消息
   const handleStreamMessage = useCallback((data: WebSocketMessage) => {
     const messageId = data.id!;
-    const content = data.fullText || data.text || '';
-    const isComplete = data.isComplete || false;
-    const from = data.from || 'ai';
+    const content = data.full_content || data.fullText || data.content || data.text || '';
+    const isComplete = data.is_complete || data.isComplete || false;
+    const from = data.from || data.sender_type || 'ai';
 
     setMessages(prev => {
       const existingIndex = prev.findIndex(msg => msg.id === messageId);
@@ -154,8 +164,9 @@ export function useChat() {
     setIsTyping(!isComplete);
 
     // 更新会话ID
-    if (data.sessionId && !sessionId) {
-      setSessionId(data.sessionId);
+    const newSessionId = data.sessionId || data.session_id;
+    if (newSessionId && !sessionId) {
+      setSessionId(newSessionId);
     }
   }, [sessionId]);
 
@@ -163,8 +174,8 @@ export function useChat() {
   const handleTextMessage = useCallback((data: WebSocketMessage) => {
     const message: ChatMessage = {
       id: data.id || uuidv4(),
-      content: data.text || '',
-      role: data.from === 'user' ? 'user' : 'assistant',
+      content: data.content || data.text || '',
+      role: (data.from === 'user' || data.sender_type === 'contact') ? 'user' : 'assistant',
       timestamp: data.timestamp || new Date().toISOString(),
       status: 'sent',
     };
@@ -184,8 +195,9 @@ export function useChat() {
     }
 
     // 更新会话ID
-    if (data.sessionId && !sessionId) {
-      setSessionId(data.sessionId);
+    const newSessionId = data.sessionId || data.session_id;
+    if (newSessionId && !sessionId) {
+      setSessionId(newSessionId);
     }
   }, [sessionId]);
 
@@ -232,9 +244,9 @@ export function useChat() {
 
     // 发送到服务器
     const wsMessage: WebSocketMessage = {
-      type: 'text',
+      type: 'message',
       id: messageId,
-      text: content.trim(),
+      content: content.trim(),
       timestamp,
       userId,
       sessionId: sessionId || undefined,

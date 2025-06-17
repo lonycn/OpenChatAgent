@@ -49,7 +49,7 @@ export function useStreamingChat() {
   // 初始化WebSocket连接
   useEffect(() => {
     const wsService = createWebSocketService({
-      url: 'ws://localhost:8002',
+      url: 'ws://localhost:8000/ws',
       maxReconnectAttempts: 5,
       reconnectInterval: 2000,
       heartbeatInterval: 30000,
