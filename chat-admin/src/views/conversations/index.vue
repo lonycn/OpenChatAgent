@@ -4,7 +4,17 @@
       <!-- 左侧会话列表 -->
       <el-aside width="380px" class="conversation-sidebar">
         <div class="sidebar-header">
-          <h3>会话列表</h3>
+          <div class="header-title">
+            <h3>会话列表</h3>
+            <div class="connection-status">
+              <el-tag
+                :type="connectionStatus === 'connected' ? 'success' : 'danger'"
+                size="small"
+              >
+                {{ connectionStatus === 'connected' ? '已连接' : '未连接' }}
+              </el-tag>
+            </div>
+          </div>
           <div class="search-filters">
             <el-input
               v-model="searchText"
@@ -346,7 +356,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   Search,
@@ -360,9 +370,20 @@ import {
   ChatDotRound,
   Link
 } from '@element-plus/icons-vue'
-import { getConversationList, getConversationMessages, sendMessage } from '@/api/conversations'
+import { getConversationList, getConversationMessages, sendMessage, takeoverConversation } from '@/api/conversations'
 import type { Conversation, Message, ConversationListParams } from '@/api/conversations/types'
+import { useAdminWebSocket } from '@/composables/useAdminWebSocket'
 import dayjs from 'dayjs'
+
+// WebSocket 连接
+const {
+  connectionStatus,
+  isConnected,
+  notifications,
+  takeoverConversation: wsTakeoverConversation,
+  sendAdminMessage,
+  switchAgentType: wsSwitchAgentType
+} = useAdminWebSocket()
 
 // 响应式数据
 const loading = ref(false)
@@ -472,15 +493,24 @@ const loadMessages = async (conversationId: string) => {
 const handleSendMessage = async () => {
   if (!messageInput.value.trim() || !selectedConversation.value) return
 
+  const content = messageInput.value.trim()
+  const conversationId = selectedConversation.value.id
+
   try {
-    const response = await sendMessage(selectedConversation.value.id, {
-      content: messageInput.value,
+    // 通过 API 发送消息
+    const response = await sendMessage(conversationId, {
+      content,
       message_type: 'text'
     })
 
     if ((response as any)?.success) {
+      // 同时通过 WebSocket 发送消息以实现实时更新
+      if (isConnected.value) {
+        sendAdminMessage(conversationId, content)
+      }
+
       messageInput.value = ''
-      await loadMessages(selectedConversation.value.id)
+      await loadMessages(conversationId)
       ElMessage.success('消息发送成功')
     }
   } catch (error) {
@@ -502,23 +532,32 @@ const handleTakeOver = async () => {
   if (!selectedConversation.value) return
 
   try {
-    // TODO: 调用接管API
-    selectedConversation.value.current_agent_type = 'human'
-    ElMessage.success('已成功接管会话，现在由人工客服处理')
+    // 调用接管API
+    const response = await takeoverConversation(selectedConversation.value.id)
 
-    // 发送系统消息
-    const systemMessage = {
-      id: Date.now().toString(),
-      conversation_id: selectedConversation.value.id,
-      content: '人工客服已接管此会话',
-      sender_type: 'system' as const,
-      message_type: 'text' as const,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+    if ((response as any)?.success) {
+      // 通过 WebSocket 通知接管
+      if (isConnected.value) {
+        wsTakeoverConversation(selectedConversation.value.id)
+      }
+
+      selectedConversation.value.current_agent_type = 'human'
+      ElMessage.success('已成功接管会话，现在由人工客服处理')
+
+      // 发送系统消息
+      const systemMessage = {
+        id: Date.now().toString(),
+        conversation_id: selectedConversation.value.id,
+        content: '人工客服已接管此会话',
+        sender_type: 'system' as const,
+        message_type: 'text' as const,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+      messages.value.push(systemMessage)
+      await nextTick()
+      scrollToBottom()
     }
-    messages.value.push(systemMessage)
-    await nextTick()
-    scrollToBottom()
   } catch (error) {
     console.error('接管会话失败:', error)
     ElMessage.error('接管会话失败')
@@ -530,7 +569,11 @@ const handleSwitchToAI = async () => {
   if (!selectedConversation.value) return
 
   try {
-    // TODO: 调用切换AI的API
+    // 通过 WebSocket 切换代理类型
+    if (isConnected.value) {
+      wsSwitchAgentType(selectedConversation.value.id, 'ai')
+    }
+
     selectedConversation.value.current_agent_type = 'ai'
     ElMessage.success('已切换到AI处理')
 
@@ -690,9 +733,52 @@ const formatTime = (time: string) => {
   return dayjs(time).format('MM-DD HH:mm')
 }
 
+// WebSocket 事件监听
+const setupWebSocketListeners = () => {
+  // 监听对话更新
+  window.addEventListener('conversation-updated', (event: any) => {
+    const data = event.detail
+    console.log('对话更新:', data)
+    // 刷新对话列表
+    loadConversations()
+  })
+
+  // 监听新消息
+  window.addEventListener('new-message', (event: any) => {
+    const data = event.detail
+    console.log('新消息:', data)
+    // 如果是当前选中的对话，刷新消息列表
+    if (selectedConversation.value && data.conversation_id === selectedConversation.value.id) {
+      loadMessages(selectedConversation.value.id)
+    }
+    // 刷新对话列表以更新最后消息
+    loadConversations()
+  })
+
+  // 监听转人工请求
+  window.addEventListener('handover-request', (event: any) => {
+    const data = event.detail
+    console.log('转人工请求:', data)
+    // 刷新对话列表
+    loadConversations()
+  })
+}
+
+// 清理事件监听器
+const cleanupWebSocketListeners = () => {
+  window.removeEventListener('conversation-updated', () => {})
+  window.removeEventListener('new-message', () => {})
+  window.removeEventListener('handover-request', () => {})
+}
+
 // 生命周期
 onMounted(() => {
   loadConversations()
+  setupWebSocketListeners()
+})
+
+onUnmounted(() => {
+  cleanupWebSocketListeners()
 })
 </script>
 
@@ -715,10 +801,22 @@ onMounted(() => {
   border-bottom: 1px solid #e8e8e8;
   flex-shrink: 0;
 
-  h3 {
-    margin: 0 0 16px 0;
-    font-size: 16px;
-    font-weight: 600;
+  .header-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+
+    h3 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .connection-status {
+      display: flex;
+      align-items: center;
+    }
   }
 
   .search-filters {

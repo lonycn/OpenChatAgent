@@ -711,6 +711,55 @@ class ConversationService:
             logger.error(f"Failed to update conversation status {conversation_id}: {e}")
             raise
 
+    async def get_conversation_by_session_id(self, session_id: str) -> Optional[Conversation]:
+        """
+        根据会话ID获取对话
+
+        Args:
+            session_id: 会话ID
+
+        Returns:
+            对话对象或None
+        """
+        try:
+            # 首先从会话管理器获取会话信息
+            from src.session.manager import get_session_manager
+            session_manager = get_session_manager()
+            session = await session_manager.get_session(session_id)
+
+            if not session or not session.conversation_id:
+                return None
+
+            # 根据对话ID获取对话
+            return await self.get_conversation_by_id(session.conversation_id)
+
+        except Exception as e:
+            logger.error(f"Failed to get conversation by session ID {session_id}: {e}")
+            return None
+
+    async def get_or_create_conversation_by_session(self, session_id: str) -> Optional[Conversation]:
+        """
+        根据会话ID获取或创建对话
+
+        Args:
+            session_id: 会话ID
+
+        Returns:
+            对话对象或None
+        """
+        try:
+            # 首先尝试获取现有对话
+            conversation = await self.get_conversation_by_session_id(session_id)
+            if conversation:
+                return conversation
+
+            # 如果不存在，创建新对话
+            return await self.create_conversation_for_session(session_id)
+
+        except Exception as e:
+            logger.error(f"Failed to get or create conversation for session {session_id}: {e}")
+            return None
+
     async def switch_agent_type(self, conversation_id: int, agent_type: AgentType) -> Conversation:
         """
         切换代理类型

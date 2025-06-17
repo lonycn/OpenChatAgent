@@ -114,6 +114,8 @@ async def handle_websocket_message(connection_id: str, message_data: Dict[str, A
             await handle_join_session(connection_id, message_data)
         elif message_type == "leave_session":
             await handle_leave_session(connection_id, message_data)
+        elif message_type == "system":
+            await handle_system_message(connection_id, message_data)
         else:
             await send_error_response(connection_id, "UNKNOWN_TYPE", f"未知消息类型: {message_type}")
     
@@ -413,6 +415,151 @@ async def handle_leave_session(connection_id: str, message_data: Dict[str, Any])
         logger.error(f"Leave session error: {e}")
 
 
+async def handle_system_message(connection_id: str, message_data: Dict[str, Any]):
+    """处理系统消息（转人工、AI接管等）"""
+    try:
+        action = message_data.get("action")
+        session_id = message_data.get("sessionId") or message_data.get("session_id")
+        user_id = message_data.get("userId") or message_data.get("user_id")
+
+        connection = websocket_manager.get_connection(connection_id)
+        if not connection:
+            await send_error_response(connection_id, "CONNECTION_NOT_FOUND", "连接不存在")
+            return
+
+        if action == "request_handover":
+            # 处理转人工请求
+            await handle_handover_request(connection_id, session_id, user_id)
+        elif action == "ai_takeover":
+            # 处理AI接管请求
+            await handle_ai_takeover(connection_id, session_id, user_id)
+        else:
+            await send_error_response(connection_id, "UNKNOWN_ACTION", f"未知系统操作: {action}")
+
+    except Exception as e:
+        logger.error(f"System message error: {e}")
+        await send_error_response(connection_id, "SYSTEM_ERROR", f"系统消息处理失败: {str(e)}")
+
+
+async def handle_handover_request(connection_id: str, session_id: str, user_id: str):
+    """处理转人工请求"""
+    try:
+        from src.services.conversation import ConversationService
+        from src.core.database import get_db_session
+
+        # 使用独立的数据库会话
+        async with get_db_session() as db_session:
+            conversation_service = ConversationService(db_session)
+
+            # 查找或创建对话
+            conversation = await conversation_service.get_or_create_conversation_by_session(session_id)
+
+            if conversation:
+                # 更新对话状态为等待人工
+                from src.models.conversation import AgentType, ConversationStatus
+                conversation.current_agent_type = AgentType.HUMAN
+                conversation.status = ConversationStatus.PENDING
+                conversation.agent_switched_at = datetime.now()
+
+                await db_session.commit()
+                await db_session.refresh(conversation)
+
+                # 发送转人工成功响应
+                response = WebSocketResponse(
+                    type="system",
+                    data={
+                        "action": "handover",
+                        "status": "success",
+                        "message": "已成功转接到人工客服，请稍候...",
+                        "conversation_id": conversation.id,
+                        "current_agent_type": "human"
+                    }
+                )
+
+                await websocket_manager.send_to_connection(connection_id, response.model_dump())
+
+                # 通知管理员有新的转人工请求
+                await notify_admin_handover_request(conversation.id, session_id)
+
+                logger.info(f"Handover request processed for session {session_id}, conversation {conversation.id}")
+            else:
+                await send_error_response(connection_id, "CONVERSATION_ERROR", "无法创建或找到对话")
+
+    except Exception as e:
+        logger.error(f"Handover request error: {e}")
+        await send_error_response(connection_id, "HANDOVER_ERROR", f"转人工请求失败: {str(e)}")
+
+
+async def handle_ai_takeover(connection_id: str, session_id: str, user_id: str):
+    """处理AI接管请求"""
+    try:
+        from src.services.conversation import ConversationService
+        from src.core.database import get_db_session
+
+        # 使用独立的数据库会话
+        async with get_db_session() as db_session:
+            conversation_service = ConversationService(db_session)
+
+            # 查找对话
+            conversation = await conversation_service.get_conversation_by_session_id(session_id)
+
+            if conversation:
+                # 更新对话状态为AI处理
+                from src.models.conversation import AgentType, ConversationStatus
+                conversation.current_agent_type = AgentType.AI
+                conversation.status = ConversationStatus.OPEN
+                conversation.agent_switched_at = datetime.now()
+                conversation.assignee_id = None  # 清除人工客服分配
+
+                await db_session.commit()
+                await db_session.refresh(conversation)
+
+                # 发送AI接管成功响应
+                response = WebSocketResponse(
+                    type="system",
+                    data={
+                        "action": "handover",
+                        "status": "success",
+                        "message": "AI助手已接管对话",
+                        "conversation_id": conversation.id,
+                        "current_agent_type": "ai"
+                    }
+                )
+
+                await websocket_manager.send_to_connection(connection_id, response.model_dump())
+
+                logger.info(f"AI takeover processed for session {session_id}, conversation {conversation.id}")
+            else:
+                await send_error_response(connection_id, "CONVERSATION_ERROR", "找不到对话")
+
+    except Exception as e:
+        logger.error(f"AI takeover error: {e}")
+        await send_error_response(connection_id, "AI_TAKEOVER_ERROR", f"AI接管失败: {str(e)}")
+
+
+async def notify_admin_handover_request(conversation_id: int, session_id: str):
+    """通知管理员有新的转人工请求"""
+    try:
+        # 发送通知到所有管理员连接
+        notification = {
+            "type": "notification",
+            "data": {
+                "event": "handover_request",
+                "conversation_id": conversation_id,
+                "session_id": session_id,
+                "message": "有新的转人工请求",
+                "timestamp": datetime.now().isoformat()
+            }
+        }
+
+        # 这里可以实现向管理员WebSocket连接发送通知的逻辑
+        # 暂时记录日志
+        logger.info(f"Handover notification: conversation {conversation_id}, session {session_id}")
+
+    except Exception as e:
+        logger.error(f"Failed to notify admin handover request: {e}")
+
+
 async def send_error_response(connection_id: str, error_code: str, error_message: str):
     """发送错误响应"""
     response = WebSocketResponse(
@@ -424,7 +571,7 @@ async def send_error_response(connection_id: str, error_code: str, error_message
         success=False,
         error=error_message
     )
-    
+
     await websocket_manager.send_to_connection(
         connection_id,
         response.model_dump()
