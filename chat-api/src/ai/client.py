@@ -130,13 +130,13 @@ class DashScopeClient(AIClient):
             raise AIServiceException(f"DashScope error: {str(e)}")
     
     async def stream_message(
-        self, 
-        messages: List[Dict[str, str]], 
+        self,
+        messages: List[Dict[str, str]],
         **kwargs
     ) -> AsyncGenerator[str, None]:
         """流式发送消息到DashScope"""
         start_time = time.time()
-        
+
         try:
             # 构建请求数据
             data = {
@@ -151,7 +151,7 @@ class DashScopeClient(AIClient):
                     "incremental_output": True
                 }
             }
-            
+
             # 发送流式请求
             async with self.client.stream(
                 "POST",
@@ -160,32 +160,48 @@ class DashScopeClient(AIClient):
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json",
-                    "Accept": "text/event-stream"
+                    "Accept": "text/event-stream",
+                    "X-DashScope-SSE": "enable"
                 }
             ) as response:
                 response.raise_for_status()
-                
+
                 async for line in response.aiter_lines():
-                    if line.startswith("data: "):
+                    line = line.strip()
+
+                    if line.startswith("data:"):
+                        data_content = line[5:].strip()  # 移除 "data:" 前缀
+
+                        if data_content == "[DONE]":
+                            break
+
+                        if not data_content:
+                            continue
+
                         try:
                             import json
-                            data = json.loads(line[6:])  # 移除 "data: " 前缀
-                            
-                            output = data.get("output", {})
+                            chunk_data = json.loads(data_content)
+
+                            output = chunk_data.get("output", {})
                             choices = output.get("choices", [])
-                            
+
                             if choices:
-                                content = choices[0].get("message", {}).get("content", "")
+                                choice = choices[0]
+                                message = choice.get("message", {})
+                                content = message.get("content", "")
+
                                 if content:
                                     yield content
-                        
-                        except json.JSONDecodeError:
+
+                        except json.JSONDecodeError as e:
+                            logger.warning(f"Failed to parse DashScope chunk: {data_content}, error: {e}")
                             continue
-            
+
             # 记录指标
             duration = time.time() - start_time
             metrics.record_ai_request("dashscope", "stream_success", duration)
-            
+            logger.info(f"DashScope stream completed in {duration:.2f}s")
+
         except Exception as e:
             duration = time.time() - start_time
             metrics.record_ai_request("dashscope", "stream_error", duration)

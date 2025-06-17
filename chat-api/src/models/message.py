@@ -16,7 +16,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.database import Base
-from .base import BaseModel, TimestampMixin, UUIDMixin
+from .base import BaseModel, TimestampMixin, UUIDMixin, PaginationResponse
 
 
 class MessageType(str, Enum):
@@ -125,11 +125,7 @@ class MessageSend(BaseModel):
 class MessageListResponse(BaseModel):
     """消息列表响应模型"""
     messages: List[MessageResponse] = Field(description="消息列表")
-    total: int = Field(description="总数量")
-    page: int = Field(description="当前页码")
-    size: int = Field(description="每页数量")
-    pages: int = Field(description="总页数")
-    has_more: bool = Field(description="是否有更多消息")
+    pagination: "PaginationResponse" = Field(description="分页信息")
 
 
 class WebSocketMessage(BaseModel):

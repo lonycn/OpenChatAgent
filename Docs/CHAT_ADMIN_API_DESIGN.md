@@ -91,6 +91,24 @@ Content-Type: application/json
   "email": "agent@example.com",
   "password": "password123"
 }
+
+Response:
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": 123,
+      "email": "agent@example.com",
+      "name": "张三",
+      "username": "agent001",
+      "role": "agent",
+      "status": "active",
+      "avatar_url": "https://..."
+    },
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refresh_token": "refresh_token_string"
+  }
+}
 ```
 
 #### 刷新 Token

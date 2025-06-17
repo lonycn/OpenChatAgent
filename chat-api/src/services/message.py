@@ -176,11 +176,11 @@ class MessageService:
             # 发送WebSocket通知
             await self._send_websocket_notification(message, message_data.session_id)
             
-            # 处理AI回复
+            # 处理AI回复 - 使用独立的异步任务和数据库会话
             if message_data.session_id:
                 import asyncio
-                asyncio.create_task(self._process_ai_response(
-                    message_data.session_id, 
+                asyncio.create_task(_process_ai_response_async(
+                    message_data.session_id,
                     conversation_id,
                     message_data.content
                 ))
@@ -314,37 +314,67 @@ class MessageService:
         except Exception as e:
             logger.error(f"Failed to send WebSocket notification: {e}")
     
-    async def _process_ai_response(
-        self, 
-        session_id: str, 
-        conversation_id: int,
-        user_message: str
-    ):
-        """处理AI回复"""
-        try:
-            import asyncio
-            
+
+
+
+async def _process_ai_response_async(
+    session_id: str,
+    conversation_id: int,
+    user_message: str
+):
+    """
+    独立的异步AI回复处理函数
+    使用独立的数据库会话，避免会话冲突
+    """
+    try:
+        from src.core.database import get_db_session
+        from src.session.manager import get_session_manager
+
+        logger.info(f"Processing AI response for session {session_id}")
+
+        # 使用独立的数据库会话
+        async with get_db_session() as db_session:
+            # 创建新的MessageService实例
+            message_service = MessageService(db_session)
+            session_manager = get_session_manager()
+
             # 获取会话信息
-            session = await self.session_manager.get_session(session_id)
-            if not session or session.agent_type.value != "ai":
-                return  # 不是AI会话，跳过
-            
+            session = await session_manager.get_session(session_id)
+            if not session:
+                logger.warning(f"Session {session_id} not found")
+                return
+
+            # 检查是否是AI会话（默认为AI会话）
+            agent_type = getattr(session, 'agent_type', None)
+            if agent_type and hasattr(agent_type, 'value'):
+                agent_type_value = agent_type.value
+            elif isinstance(agent_type, str):
+                agent_type_value = agent_type
+            else:
+                agent_type_value = "ai"  # 默认为AI
+
+            if agent_type_value != "ai":
+                logger.info(f"Session {session_id} is not AI session, skipping AI response")
+                return
+
             # 获取对话历史
-            messages, _ = await self.get_conversation_messages(conversation_id, size=10)
-            
+            messages, _ = await message_service.get_conversation_messages(conversation_id, size=10)
+
             # 构建AI对话上下文
             ai_context = ai_service.build_conversation_context([
                 {
                     "content": msg.content,
-                    "sender_type": msg.sender_type.value,
+                    "sender_type": msg.sender_type.value if hasattr(msg.sender_type, 'value') else str(msg.sender_type),
                     "created_at": msg.created_at
                 }
                 for msg in reversed(messages)  # 按时间顺序
             ])
-            
+
             # 获取系统提示词
             system_prompt = ai_service.get_default_system_prompt()
-            
+
+            logger.info(f"Sending AI request for session {session_id}")
+
             # 发送正在输入状态
             typing_message = {
                 "type": "typing",
@@ -355,16 +385,19 @@ class MessageService:
                 }
             }
             await websocket_manager.send_to_session(session_id, typing_message)
-            
+
             # 流式获取AI回复
             full_response = ""
+            chunk_count = 0
+
             async for chunk in ai_service.stream_chat_completion(
                 user_message,
-                ai_context,
-                system_prompt
+                conversation_history=ai_context,
+                system_prompt=system_prompt
             ):
                 full_response += chunk
-                
+                chunk_count += 1
+
                 # 发送流式响应
                 stream_message = {
                     "type": "ai_stream",
@@ -376,22 +409,29 @@ class MessageService:
                     }
                 }
                 await websocket_manager.send_to_session(session_id, stream_message)
-            
+
+            logger.info(f"AI response completed for session {session_id}, chunks: {chunk_count}, length: {len(full_response)}")
+
+            # 如果没有收到任何回复，使用默认回复
+            if not full_response:
+                full_response = "抱歉，我现在无法回答您的问题。请稍后再试或联系人工客服。"
+                logger.warning(f"No AI response received for session {session_id}, using default response")
+
             # 停止正在输入状态
             typing_message["data"]["is_typing"] = False
             await websocket_manager.send_to_session(session_id, typing_message)
-            
+
             # 保存AI回复消息
             ai_message_data = MessageCreate(
                 conversation_id=conversation_id,
                 sender_type=SenderType.AI,
                 content=full_response,
                 message_type=MessageType.TEXT,
-                metadata={"ai_provider": "auto"}
+                message_metadata={"ai_provider": "auto", "chunks": chunk_count}
             )
-            
-            ai_message = await self.create_message(ai_message_data)
-            
+
+            ai_message = await message_service.create_message(ai_message_data)
+
             # 发送完整AI回复
             complete_message = {
                 "type": "ai_stream",
@@ -404,19 +444,23 @@ class MessageService:
                 }
             }
             await websocket_manager.send_to_session(session_id, complete_message)
-            
+
             # 发送消息通知
-            await self._send_websocket_notification(ai_message, session_id)
-            
-        except Exception as e:
-            logger.error(f"Failed to process AI response: {e}")
-            
-            # 发送错误消息
-            error_message = {
-                "type": "error",
-                "data": {
-                    "session_id": session_id,
-                    "error": "AI服务暂时不可用，请稍后重试"
-                }
+            await message_service._send_websocket_notification(ai_message, session_id)
+
+            logger.info(f"AI response sent successfully for session {session_id}")
+
+    except Exception as e:
+        logger.error(f"Failed to process AI response for session {session_id}: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+
+        # 发送错误消息
+        error_message = {
+            "type": "error",
+            "data": {
+                "session_id": session_id,
+                "error": "AI服务暂时不可用，请稍后重试"
             }
-            await websocket_manager.send_to_session(session_id, error_message)
+        }
+        await websocket_manager.send_to_session(session_id, error_message)

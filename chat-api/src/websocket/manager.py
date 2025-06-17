@@ -188,21 +188,28 @@ class ConnectionManager:
         return success
     
     async def send_to_session(
-        self, 
-        session_id: str, 
+        self,
+        session_id: str,
         message: Dict[str, Any],
         exclude_connection: str = None
     ) -> int:
         """发送消息到会话的所有连接"""
         connection_ids = self.session_connections.get(session_id, set())
+        logger.debug(f"Sending message to session {session_id}, found {len(connection_ids)} connections: {connection_ids}")
+
         if exclude_connection:
             connection_ids = connection_ids - {exclude_connection}
-        
+
         sent_count = 0
         for connection_id in connection_ids.copy():  # 复制集合避免修改时出错
+            logger.debug(f"Sending message to connection {connection_id}: {message.get('type', 'unknown')}")
             if await self.send_to_connection(connection_id, message):
                 sent_count += 1
-        
+                logger.debug(f"Successfully sent message to connection {connection_id}")
+            else:
+                logger.warning(f"Failed to send message to connection {connection_id}")
+
+        logger.debug(f"Sent message to {sent_count} connections for session {session_id}")
         return sent_count
     
     async def send_to_user(

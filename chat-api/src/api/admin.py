@@ -4,7 +4,7 @@
 用户管理、对话管理、统计分析等接口
 """
 
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from loguru import logger
@@ -21,8 +21,18 @@ from src.models.user import (
     User, UserCreate, UserUpdate, UserResponse, UserListResponse,
     TokenData, UserRole, UserStatus
 )
+from src.models.conversation import (
+    Conversation, ConversationResponse, ConversationListResponse,
+    ConversationStatus, ConversationPriority, AgentType
+)
+from src.models.message import (
+    Message, MessageResponse, MessageCreate, MessageListResponse,
+    MessageType, SenderType
+)
 from src.models.base import PaginationParams
 from src.services.user import UserService
+from src.services.conversation import ConversationService
+from src.services.message import MessageService
 
 # 配置
 settings = get_settings()
@@ -333,6 +343,109 @@ async def change_user_status(
         )
 
 
+@router.post("/users/{user_id}/reset-password", summary="重置用户密码")
+async def reset_user_password(
+    request: Request,
+    user_id: int,
+    new_password: str,
+    current_user: TokenData = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    重置指定用户的密码（需要管理员权限）
+
+    - **user_id**: 用户ID
+    - **new_password**: 新密码
+
+    返回操作结果
+    """
+    try:
+        from passlib.context import CryptContext
+
+        user_service = UserService(db)
+        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+        # 检查用户是否存在
+        user = await user_service.get_user_by_id(user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="用户不存在"
+            )
+
+        # 加密新密码
+        hashed_password = pwd_context.hash(new_password)
+
+        # 更新密码
+        update_data = UserUpdate(password_hash=hashed_password)
+        await user_service.update_user(user_id, update_data)
+
+        # 记录操作日志
+        log_user_action(
+            request,
+            "reset_password",
+            "user",
+            {"user_id": user_id}
+        )
+
+        logger.info(f"Password reset for user {user_id} by admin {current_user.user_id}")
+
+        return {
+            "success": True,
+            "message": "密码重置成功"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Reset password error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="重置密码失败"
+        )
+
+
+@router.get("/permissions", summary="获取所有可用权限")
+async def get_available_permissions(
+    request: Request,
+    current_user: TokenData = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    获取系统中所有可用的权限列表（需要管理员权限）
+
+    返回权限列表
+    """
+    try:
+        # 定义系统权限列表
+        permissions = [
+            {"code": "user.read", "name": "查看用户", "description": "查看用户信息"},
+            {"code": "user.create", "name": "创建用户", "description": "创建新用户"},
+            {"code": "user.update", "name": "更新用户", "description": "更新用户信息"},
+            {"code": "user.delete", "name": "删除用户", "description": "删除用户"},
+            {"code": "conversation.read", "name": "查看会话", "description": "查看会话信息"},
+            {"code": "conversation.manage", "name": "管理会话", "description": "管理会话状态"},
+            {"code": "message.read", "name": "查看消息", "description": "查看消息内容"},
+            {"code": "message.send", "name": "发送消息", "description": "发送消息"},
+            {"code": "analytics.read", "name": "查看统计", "description": "查看统计数据"},
+            {"code": "system.admin", "name": "系统管理", "description": "系统管理权限"},
+        ]
+
+        return {
+            "success": True,
+            "data": {
+                "permissions": permissions
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Get available permissions error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="获取权限列表失败"
+        )
+
+
 # ==========================================
 # 📊 统计分析
 # ==========================================
@@ -380,12 +493,516 @@ async def get_dashboard_analytics(
         }
         
         return dashboard_data
-        
+
     except Exception as e:
         logger.error(f"Get dashboard analytics error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="获取统计数据失败"
+        )
+
+
+# ==========================================
+# 💬 会话管理
+# ==========================================
+
+@router.get("/conversations", response_model=ConversationListResponse, summary="获取会话列表")
+async def get_conversations(
+    request: Request,
+    pagination: PaginationParams = Depends(get_pagination_params),
+    status: Optional[str] = None,
+    assignee_id: Optional[int] = None,
+    priority: Optional[str] = None,
+    channel_type: Optional[str] = None,
+    current_agent_type: Optional[str] = None,
+    search: Optional[str] = None,
+    current_user: TokenData = Depends(get_current_supervisor),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    获取会话列表（需要主管或管理员权限）
+
+    - **page**: 页码
+    - **size**: 每页数量
+    - **status**: 会话状态过滤
+    - **assignee_id**: 指派客服ID过滤
+    - **priority**: 优先级过滤
+    - **channel_type**: 渠道类型过滤
+    - **current_agent_type**: 当前代理类型过滤
+    - **search**: 搜索关键词
+
+    返回会话列表和分页信息
+    """
+    try:
+        conversation_service = ConversationService(db)
+
+        # 构建过滤条件
+        filters = {}
+        if status:
+            filters["status"] = status
+        if assignee_id:
+            filters["assignee_id"] = assignee_id
+        if priority:
+            filters["priority"] = priority
+        if channel_type:
+            filters["channel_type"] = channel_type
+        if current_agent_type:
+            filters["current_agent_type"] = current_agent_type
+
+        conversations, pagination_info = await conversation_service.list_conversations(
+            page=pagination.page,
+            size=pagination.size,
+            filters=filters,
+            search=search
+        )
+
+        return ConversationListResponse(
+            conversations=[ConversationResponse.model_validate(conv) for conv in conversations],
+            pagination=pagination_info
+        )
+
+    except Exception as e:
+        logger.error(f"Get conversations error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="获取会话列表失败"
+        )
+
+
+@router.get("/conversations/{conversation_id}", response_model=ConversationResponse, summary="获取会话详情")
+async def get_conversation_detail(
+    request: Request,
+    conversation_id: int,
+    current_user: TokenData = Depends(get_current_supervisor),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    获取指定会话的详细信息（需要主管或管理员权限）
+
+    - **conversation_id**: 会话ID
+
+    返回会话详细信息
+    """
+    try:
+        conversation_service = ConversationService(db)
+        conversation = await conversation_service.get_conversation_by_id(conversation_id)
+
+        if not conversation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="会话不存在"
+            )
+
+        return ConversationResponse.model_validate(conversation)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Get conversation detail error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="获取会话详情失败"
+        )
+
+
+@router.post("/conversations/{conversation_id}/takeover", summary="接管会话")
+async def takeover_conversation(
+    request: Request,
+    conversation_id: int,
+    current_user: TokenData = Depends(get_current_supervisor),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    接管会话（切换为人工服务）
+
+    - **conversation_id**: 会话ID
+
+    返回更新后的会话信息
+    """
+    try:
+        conversation_service = ConversationService(db)
+
+        # 检查会话是否存在
+        conversation = await conversation_service.get_conversation_by_id(conversation_id)
+        if not conversation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="会话不存在"
+            )
+
+        # 接管会话
+        updated_conversation = await conversation_service.takeover_conversation(
+            conversation_id, current_user.user_id
+        )
+
+        # 记录操作日志
+        log_user_action(
+            request,
+            "takeover_conversation",
+            "conversation",
+            {"conversation_id": conversation_id}
+        )
+
+        logger.info(f"Conversation {conversation_id} taken over by user {current_user.user_id}")
+
+        return {
+            "success": True,
+            "data": {
+                "conversation": ConversationResponse.model_validate(updated_conversation),
+                "message": "会话接管成功"
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Takeover conversation error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="接管会话失败"
+        )
+
+
+@router.post("/conversations/{conversation_id}/assign", summary="分配会话")
+async def assign_conversation(
+    request: Request,
+    conversation_id: int,
+    assignee_id: int,
+    current_user: TokenData = Depends(get_current_supervisor),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    分配会话给指定客服
+
+    - **conversation_id**: 会话ID
+    - **assignee_id**: 指派的客服ID
+
+    返回更新后的会话信息
+    """
+    try:
+        conversation_service = ConversationService(db)
+
+        # 检查会话是否存在
+        conversation = await conversation_service.get_conversation_by_id(conversation_id)
+        if not conversation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="会话不存在"
+            )
+
+        # 分配会话
+        updated_conversation = await conversation_service.assign_conversation(
+            conversation_id, assignee_id
+        )
+
+        # 记录操作日志
+        log_user_action(
+            request,
+            "assign_conversation",
+            "conversation",
+            {"conversation_id": conversation_id, "assignee_id": assignee_id}
+        )
+
+        logger.info(f"Conversation {conversation_id} assigned to user {assignee_id}")
+
+        return {
+            "success": True,
+            "data": {
+                "conversation": ConversationResponse.model_validate(updated_conversation),
+                "message": "会话分配成功"
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Assign conversation error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="分配会话失败"
+        )
+
+
+@router.put("/conversations/{conversation_id}/status", summary="更新会话状态")
+async def update_conversation_status(
+    request: Request,
+    conversation_id: int,
+    new_status: str,
+    current_user: TokenData = Depends(get_current_supervisor),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    更新会话状态
+
+    - **conversation_id**: 会话ID
+    - **new_status**: 新状态 (open, pending, resolved, closed)
+
+    返回更新后的会话信息
+    """
+    try:
+        conversation_service = ConversationService(db)
+
+        # 检查会话是否存在
+        conversation = await conversation_service.get_conversation_by_id(conversation_id)
+        if not conversation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="会话不存在"
+            )
+
+        # 验证状态值
+        try:
+            status_enum = ConversationStatus(new_status)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="无效的状态值"
+            )
+
+        # 更新状态
+        updated_conversation = await conversation_service.update_conversation_status(
+            conversation_id, status_enum
+        )
+
+        # 记录操作日志
+        log_user_action(
+            request,
+            "update_conversation_status",
+            "conversation",
+            {"conversation_id": conversation_id, "new_status": new_status}
+        )
+
+        logger.info(f"Conversation {conversation_id} status updated to {new_status}")
+
+        return {
+            "success": True,
+            "data": {
+                "conversation": ConversationResponse.model_validate(updated_conversation),
+                "message": "会话状态更新成功"
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Update conversation status error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="更新会话状态失败"
+        )
+
+
+# ==========================================
+# 📨 消息管理
+# ==========================================
+
+@router.get("/conversations/{conversation_id}/messages", response_model=MessageListResponse, summary="获取会话消息")
+async def get_conversation_messages(
+    request: Request,
+    conversation_id: int,
+    pagination: PaginationParams = Depends(get_pagination_params),
+    include_private: bool = False,
+    current_user: TokenData = Depends(get_current_supervisor),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    获取指定会话的消息列表
+
+    - **conversation_id**: 会话ID
+    - **page**: 页码
+    - **size**: 每页数量
+    - **include_private**: 是否包含私有消息
+
+    返回消息列表和分页信息
+    """
+    try:
+        message_service = MessageService(db)
+
+        messages, pagination_info = await message_service.list_messages_by_conversation(
+            conversation_id=conversation_id,
+            page=pagination.page,
+            size=pagination.size,
+            include_private=include_private
+        )
+
+        return MessageListResponse(
+            messages=[MessageResponse.model_validate(msg) for msg in messages],
+            pagination=pagination_info
+        )
+
+    except Exception as e:
+        logger.error(f"Get conversation messages error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="获取消息列表失败"
+        )
+
+
+@router.post("/conversations/{conversation_id}/messages", response_model=MessageResponse, summary="发送消息")
+async def send_message(
+    request: Request,
+    conversation_id: int,
+    message_data: MessageCreate,
+    current_user: TokenData = Depends(get_current_supervisor),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    在指定会话中发送消息
+
+    - **conversation_id**: 会话ID
+    - **content**: 消息内容
+    - **message_type**: 消息类型
+    - **is_private**: 是否为私有消息
+
+    返回发送的消息信息
+    """
+    try:
+        message_service = MessageService(db)
+
+        # 设置发送者信息
+        message_data.conversation_id = conversation_id
+        message_data.sender_type = SenderType.AGENT
+        message_data.sender_id = current_user.user_id
+
+        message = await message_service.create_message(message_data)
+
+        # 记录操作日志
+        log_user_action(
+            request,
+            "send_message",
+            "message",
+            {"conversation_id": conversation_id, "message_id": message.id}
+        )
+
+        logger.info(f"Message sent by user {current_user.user_id} in conversation {conversation_id}")
+
+        return MessageResponse.model_validate(message)
+
+    except Exception as e:
+        logger.error(f"Send message error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="发送消息失败"
+        )
+
+
+@router.post("/conversations/{conversation_id}/notes", response_model=MessageResponse, summary="添加私有备注")
+async def add_conversation_note(
+    request: Request,
+    conversation_id: int,
+    content: str,
+    current_user: TokenData = Depends(get_current_supervisor),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    为会话添加私有备注
+
+    - **conversation_id**: 会话ID
+    - **content**: 备注内容
+
+    返回创建的备注消息
+    """
+    try:
+        message_service = MessageService(db)
+
+        # 创建私有备注
+        note_data = MessageCreate(
+            conversation_id=conversation_id,
+            sender_type=SenderType.AGENT,
+            sender_id=current_user.user_id,
+            content=content,
+            message_type=MessageType.TEXT,
+            is_private=True
+        )
+
+        note = await message_service.create_message(note_data)
+
+        # 记录操作日志
+        log_user_action(
+            request,
+            "add_note",
+            "message",
+            {"conversation_id": conversation_id, "note_id": note.id}
+        )
+
+        logger.info(f"Note added by user {current_user.user_id} to conversation {conversation_id}")
+
+        return MessageResponse.model_validate(note)
+
+    except Exception as e:
+        logger.error(f"Add note error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="添加备注失败"
+        )
+
+
+@router.post("/conversations/{conversation_id}/switch-agent", summary="切换代理类型")
+async def switch_agent_type(
+    request: Request,
+    conversation_id: int,
+    agent_type: str,
+    current_user: TokenData = Depends(get_current_supervisor),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    切换会话的代理类型（AI/人工）
+
+    - **conversation_id**: 会话ID
+    - **agent_type**: 代理类型 (ai, human)
+
+    返回更新后的会话信息
+    """
+    try:
+        conversation_service = ConversationService(db)
+
+        # 检查会话是否存在
+        conversation = await conversation_service.get_conversation_by_id(conversation_id)
+        if not conversation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="会话不存在"
+            )
+
+        # 验证代理类型
+        try:
+            agent_type_enum = AgentType(agent_type)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="无效的代理类型"
+            )
+
+        # 切换代理类型
+        updated_conversation = await conversation_service.switch_agent_type(
+            conversation_id, agent_type_enum
+        )
+
+        # 记录操作日志
+        log_user_action(
+            request,
+            "switch_agent_type",
+            "conversation",
+            {"conversation_id": conversation_id, "agent_type": agent_type}
+        )
+
+        logger.info(f"Conversation {conversation_id} agent type switched to {agent_type}")
+
+        return {
+            "success": True,
+            "data": {
+                "conversation": ConversationResponse.model_validate(updated_conversation),
+                "message": "代理类型切换成功"
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Switch agent type error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="切换代理类型失败"
         )
 
 

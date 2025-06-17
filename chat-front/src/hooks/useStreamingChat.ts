@@ -123,9 +123,18 @@ export function useStreamingChat() {
   const handleWebSocketMessage = useCallback((data: WebSocketMessage) => {
     console.log('📨 收到WebSocket消息:', data);
 
-    // 消息去重检查
-    const messageKey = `${data.type}_${data.id}_${data.timestamp}`;
-    if (processedMessageIds.current.has(messageKey)) {
+    // 对于ai_stream消息，使用session_id作为去重标识，允许更新
+    let messageKey: string;
+    if (data.type === 'ai_stream') {
+      const sessionId = (data as any).data?.session_id;
+      const content = (data as any).data?.content || '';
+      messageKey = `${data.type}_${sessionId}_${content.length}`;
+    } else {
+      messageKey = `${data.type}_${data.id}_${data.timestamp}`;
+    }
+
+    // 对于非流式消息进行去重检查
+    if (data.type !== 'ai_stream' && processedMessageIds.current.has(messageKey)) {
       console.log('⚠️ 跳过重复消息:', messageKey);
       return;
     }
@@ -135,6 +144,10 @@ export function useStreamingChat() {
       case 'stream':
         handleStreamMessage(data);
         break;
+      case 'ai_stream':
+        // 处理AI流式回复
+        handleAIStreamMessage(data);
+        break;
       case 'response':
         // response类型消息标记流式消息的真正结束
         handleResponseMessage(data);
@@ -142,8 +155,24 @@ export function useStreamingChat() {
       case 'text':
         handleTextMessage(data);
         break;
+      case 'message':
+        // 处理普通消息
+        handleMessageReceived(data);
+        break;
+      case 'message_sent':
+        // 处理消息发送确认
+        handleMessageSent(data);
+        break;
+      case 'typing':
+        // 处理打字状态
+        handleTypingStatus(data);
+        break;
       case 'system':
         handleSystemMessage(data);
+        break;
+      case 'connection':
+        // 处理连接确认
+        handleConnectionMessage(data);
         break;
       default:
         console.log('❓ 未知消息类型:', data.type);
@@ -263,6 +292,131 @@ export function useStreamingChat() {
       setSessionId(data.sessionId);
     }
   }, [sessionId]);
+
+  // 用于跟踪当前活跃的AI流式消息ID
+  const currentAIStreamIdRef = useRef<string | null>(null);
+
+  // 处理AI流式回复
+  const handleAIStreamMessage = useCallback((data: any) => {
+    const msgSessionId = data.data?.session_id;
+    const content = data.data?.content || '';
+    const fullContent = data.data?.full_content || content;
+    const isComplete = data.data?.is_complete || false;
+
+    // 如果是新的流式消息（没有活跃的流式消息或内容重置），创建新的消息ID
+    let messageId = currentAIStreamIdRef.current;
+    if (!messageId || fullContent.length < (streamingMessagesRef.current.get(messageId)?.content?.length || 0)) {
+      messageId = `ai_stream_${msgSessionId}_${Date.now()}`;
+      currentAIStreamIdRef.current = messageId;
+      console.log('🆕 创建新的AI流式消息:', messageId);
+    }
+
+    console.log('🤖 处理AI流式消息:', {
+      sessionId: msgSessionId,
+      content,
+      fullContent,
+      isComplete,
+      messageId,
+      isNewMessage: currentAIStreamIdRef.current === messageId
+    });
+
+    // 更新流式消息缓存
+    streamingMessagesRef.current.set(messageId, {
+      id: messageId,
+      content: fullContent,
+      isComplete,
+      timestamp: new Date().toISOString(),
+    });
+
+    // 更新消息列表
+    setMessages(prev => {
+      // 查找现有的AI流式消息
+      const existingIndex = prev.findIndex(msg => msg.id === messageId);
+
+      const newMessage: ChatMessage = {
+        id: messageId,
+        content: fullContent,
+        role: 'assistant',
+        timestamp: existingIndex >= 0 ? prev[existingIndex].timestamp : new Date().toISOString(),
+        isStreaming: !isComplete,
+        status: 'sent',
+      };
+
+      if (existingIndex >= 0) {
+        // 更新现有的流式消息
+        const newMessages = [...prev];
+        newMessages[existingIndex] = newMessage;
+        return newMessages;
+      } else {
+        // 添加新的流式消息
+        return [...prev, newMessage];
+      }
+    });
+
+    // 如果流式消息完成，清理缓存
+    if (isComplete) {
+      console.log('✅ AI流式消息完成:', messageId);
+      streamingMessagesRef.current.delete(messageId);
+      currentAIStreamIdRef.current = null; // 重置当前活跃的流式消息ID
+      setIsTyping(false);
+    } else {
+      setIsTyping(true);
+    }
+
+    // 更新会话ID
+    if (msgSessionId && !sessionId) {
+      setSessionId(msgSessionId);
+    }
+  }, [sessionId]);
+
+  // 处理消息接收确认
+  const handleMessageReceived = useCallback((data: any) => {
+    console.log('📨 处理消息接收:', data);
+    // 这里可以处理消息接收的逻辑，比如更新消息状态
+  }, []);
+
+  // 处理消息发送确认
+  const handleMessageSent = useCallback((data: any) => {
+    const messageId = data.data?.message_id;
+    const msgSessionId = data.data?.session_id;
+
+    console.log('✅ 消息发送确认:', { messageId, sessionId: msgSessionId });
+
+    // 更新消息状态为已发送
+    if (messageId) {
+      setMessages(prev =>
+        prev.map(msg =>
+          msg.id === messageId
+            ? { ...msg, status: 'sent' as const }
+            : msg
+        )
+      );
+    }
+
+    // 更新会话ID
+    if (msgSessionId && !sessionId) {
+      setSessionId(msgSessionId);
+    }
+  }, [sessionId]);
+
+  // 处理打字状态
+  const handleTypingStatus = useCallback((data: any) => {
+    const isTyping = data.data?.is_typing || false;
+    const senderType = data.data?.sender_type;
+
+    console.log('⌨️ 处理打字状态:', { isTyping, senderType });
+
+    // 只处理AI的打字状态
+    if (senderType === 'ai') {
+      setIsTyping(isTyping);
+    }
+  }, []);
+
+  // 处理连接消息
+  const handleConnectionMessage = useCallback((data: any) => {
+    console.log('🔗 处理连接消息:', data);
+    // 连接成功的处理逻辑
+  }, []);
 
   // 处理普通文本消息
   const handleTextMessage = useCallback((data: WebSocketMessage) => {

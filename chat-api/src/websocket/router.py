@@ -5,6 +5,7 @@
 """
 
 import json
+from datetime import datetime
 from typing import Dict, Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
@@ -232,6 +233,14 @@ async def handle_chat_message(connection_id: str, message_data: Dict[str, Any]):
             session = await session_manager.create_session(session_create)
             session_id = session.session_id
 
+            # 关联WebSocket连接到会话
+            connection.session_id = session_id
+            if session_id not in websocket_manager.session_connections:
+                websocket_manager.session_connections[session_id] = set()
+            websocket_manager.session_connections[session_id].add(connection_id)
+
+            logger.info(f"Connection {connection_id} associated with new session {session_id}")
+
         # 确认消息已收到
         confirm_response = WebSocketResponse(
             type="message_sent",
@@ -247,12 +256,23 @@ async def handle_chat_message(connection_id: str, message_data: Dict[str, Any]):
             confirm_response.model_dump(mode='json')
         )
 
-        # 调用消息服务处理消息并获取AI回复
+        # 异步处理消息，避免数据库会话冲突
+        import asyncio
+        asyncio.create_task(_process_chat_message_async(session_id, content))
+
+    except Exception as e:
+        logger.error(f"Chat message error: {e}")
+        await send_error_response(connection_id, "MESSAGE_ERROR", f"消息处理失败: {str(e)}")
+
+
+async def _process_chat_message_async(session_id: str, content: str):
+    """异步处理聊天消息，使用独立的数据库会话"""
+    try:
         from src.services.message import MessageService
         from src.models.message import MessageSend
         from src.core.database import get_db_session
 
-        # 使用数据库会话上下文管理器
+        # 使用独立的数据库会话上下文管理器
         async with get_db_session() as db_session:
             message_service = MessageService(db_session)
 
@@ -267,8 +287,20 @@ async def handle_chat_message(connection_id: str, message_data: Dict[str, Any]):
             await message_service.send_message(message_send)
 
     except Exception as e:
-        logger.error(f"Chat message error: {e}")
-        await send_error_response(connection_id, "MESSAGE_ERROR", f"消息处理失败: {str(e)}")
+        logger.error(f"Failed to process chat message async: {e}")
+        # 发送错误消息到WebSocket
+        error_message = {
+            "type": "error",
+            "data": {
+                "code": "MESSAGE_ERROR",
+                "message": f"消息处理失败: {str(e)}",
+                "error": str(e),
+                "success": False,
+                "timestamp": datetime.now().isoformat(),
+                "type": "error"
+            }
+        }
+        await websocket_manager.send_to_session(session_id, error_message)
 
 
 async def handle_typing_message(connection_id: str, message_data: Dict[str, Any]):

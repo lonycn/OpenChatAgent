@@ -605,3 +605,142 @@ class ConversationService:
             await self.db.rollback()
             logger.error(f"Failed to close conversation {conversation_id}: {e}")
             raise
+
+    async def takeover_conversation(self, conversation_id: int, user_id: int) -> Conversation:
+        """
+        接管对话（切换为人工服务）
+
+        Args:
+            conversation_id: 对话ID
+            user_id: 接管的用户ID
+
+        Returns:
+            更新后的对话对象
+        """
+        try:
+            conversation = await self.get_conversation_by_id(conversation_id)
+            if not conversation:
+                raise NotFoundException(f"对话不存在: {conversation_id}")
+
+            # 更新对话信息
+            conversation.assignee_id = user_id
+            conversation.current_agent_type = AgentType.HUMAN
+            conversation.agent_switched_at = datetime.now()
+            conversation.updated_at = datetime.now()
+
+            await self.db.commit()
+            await self.db.refresh(conversation)
+
+            logger.info(f"Conversation {conversation_id} taken over by user {user_id}")
+            return conversation
+
+        except NotFoundException:
+            raise
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"Failed to takeover conversation {conversation_id}: {e}")
+            raise
+
+    async def assign_conversation(self, conversation_id: int, assignee_id: int) -> Conversation:
+        """
+        分配对话给指定客服
+
+        Args:
+            conversation_id: 对话ID
+            assignee_id: 指派的客服ID
+
+        Returns:
+            更新后的对话对象
+        """
+        try:
+            conversation = await self.get_conversation_by_id(conversation_id)
+            if not conversation:
+                raise NotFoundException(f"对话不存在: {conversation_id}")
+
+            # 更新对话信息
+            conversation.assignee_id = assignee_id
+            conversation.updated_at = datetime.now()
+
+            await self.db.commit()
+            await self.db.refresh(conversation)
+
+            logger.info(f"Conversation {conversation_id} assigned to user {assignee_id}")
+            return conversation
+
+        except NotFoundException:
+            raise
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"Failed to assign conversation {conversation_id}: {e}")
+            raise
+
+    async def update_conversation_status(self, conversation_id: int, new_status: ConversationStatus) -> Conversation:
+        """
+        更新对话状态
+
+        Args:
+            conversation_id: 对话ID
+            new_status: 新状态
+
+        Returns:
+            更新后的对话对象
+        """
+        try:
+            conversation = await self.get_conversation_by_id(conversation_id)
+            if not conversation:
+                raise NotFoundException(f"对话不存在: {conversation_id}")
+
+            # 更新对话状态
+            conversation.status = new_status
+            conversation.updated_at = datetime.now()
+
+            # 如果是解决状态，记录解决时间
+            if new_status == ConversationStatus.RESOLVED:
+                conversation.resolved_at = datetime.now()
+
+            await self.db.commit()
+            await self.db.refresh(conversation)
+
+            logger.info(f"Conversation {conversation_id} status updated to {new_status}")
+            return conversation
+
+        except NotFoundException:
+            raise
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"Failed to update conversation status {conversation_id}: {e}")
+            raise
+
+    async def switch_agent_type(self, conversation_id: int, agent_type: AgentType) -> Conversation:
+        """
+        切换代理类型
+
+        Args:
+            conversation_id: 对话ID
+            agent_type: 代理类型
+
+        Returns:
+            更新后的对话对象
+        """
+        try:
+            conversation = await self.get_conversation_by_id(conversation_id)
+            if not conversation:
+                raise NotFoundException(f"对话不存在: {conversation_id}")
+
+            # 更新代理类型
+            conversation.current_agent_type = agent_type
+            conversation.agent_switched_at = datetime.now()
+            conversation.updated_at = datetime.now()
+
+            await self.db.commit()
+            await self.db.refresh(conversation)
+
+            logger.info(f"Conversation {conversation_id} agent type switched to {agent_type}")
+            return conversation
+
+        except NotFoundException:
+            raise
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"Failed to switch agent type for conversation {conversation_id}: {e}")
+            raise

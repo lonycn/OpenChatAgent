@@ -109,21 +109,47 @@ async def close_database() -> None:
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     """
     获取数据库会话（上下文管理器）
-    自动处理事务和异常
+    自动处理事务和异常，确保会话正确关闭
     """
     if not async_session_maker:
         raise RuntimeError("Database not initialized. Call init_database() first.")
-    
-    async with async_session_maker() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception as e:
-            await session.rollback()
-            logger.error(f"❌ Database session error: {e}")
-            raise
-        finally:
+
+    session = None
+    try:
+        # 创建新的会话实例
+        session = async_session_maker()
+
+        # 确保会话处于活动状态
+        if not session.is_active:
+            logger.warning("Session is not active, creating new session")
             await session.close()
+            session = async_session_maker()
+
+        yield session
+
+        # 只有在会话仍然活动时才提交
+        if session.is_active:
+            await session.commit()
+
+    except Exception as e:
+        # 只有在会话仍然活动时才回滚
+        if session and session.is_active:
+            try:
+                await session.rollback()
+            except Exception as rollback_error:
+                logger.error(f"❌ Error during rollback: {rollback_error}")
+
+        logger.error(f"❌ Database session error: {e}")
+        raise
+
+    finally:
+        # 确保会话被正确关闭
+        if session:
+            try:
+                if session.is_active:
+                    await session.close()
+            except Exception as close_error:
+                logger.error(f"❌ Error closing session: {close_error}")
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
